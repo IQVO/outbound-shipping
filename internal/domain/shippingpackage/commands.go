@@ -8,12 +8,15 @@ import (
 
 // ExpectInput is the PackageManifested fact the AssignPackageToLoad policy
 // feeds: the package id, its site, and the correlation the manifest carried
-// (ADR 0003). Expect raises no event (the model publishes none for it).
+// (ADR 0003). WeightG is the manifested weight in grams (0 when the producer
+// omitted it) — the bill of lading sums it. Expect raises no event (the
+// model publishes none for it).
 type ExpectInput struct {
 	PackageID     shared.PackageID
 	Site          shared.SiteID
 	SourceOrderID string
 	WorkUnitRef   string
+	WeightG       float64
 	At            time.Time
 }
 
@@ -25,9 +28,13 @@ func Expect(in ExpectInput) (*ShippingPackage, error) {
 	if in.At.IsZero() {
 		return nil, ErrNoTimestamp
 	}
+	if in.WeightG < 0 {
+		return nil, ErrInvalidWeight
+	}
 	return &ShippingPackage{
 		id: in.PackageID, site: in.Site, sourceOrderID: in.SourceOrderID,
-		workUnitRef: in.WorkUnitRef, state: StateExpected, version: 1,
+		workUnitRef: in.WorkUnitRef, weightG: in.WeightG,
+		state: StateExpected, version: 1,
 	}, nil
 }
 

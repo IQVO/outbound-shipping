@@ -38,6 +38,7 @@ type ShippingPackage struct {
 	site          shared.SiteID
 	sourceOrderID string
 	workUnitRef   string
+	weightG       float64
 	loadID        shared.LoadID
 	stagingLoc    string
 	state         State
@@ -53,6 +54,7 @@ type RehydrateParams struct {
 	Site          shared.SiteID
 	SourceOrderID string
 	WorkUnitRef   string
+	WeightG       float64
 	LoadID        shared.LoadID
 	StagingLoc    string
 	State         State
@@ -75,7 +77,8 @@ func Rehydrate(p RehydrateParams) (*ShippingPackage, error) {
 	}
 	return &ShippingPackage{
 		id: p.ID, site: p.Site, sourceOrderID: p.SourceOrderID,
-		workUnitRef: p.WorkUnitRef, loadID: p.LoadID, stagingLoc: p.StagingLoc,
+		workUnitRef: p.WorkUnitRef, weightG: p.WeightG,
+		loadID: p.LoadID, stagingLoc: p.StagingLoc,
 		state: p.State, missedFlagged: p.MissedFlagged, version: p.Version,
 	}, nil
 }
@@ -113,6 +116,10 @@ func (p *ShippingPackage) SiteID() shared.SiteID { return p.site }
 // SourceOrderID returns the order-management OrderId the manifest carried
 // ("" when the producer did not know it, ADR 0003).
 func (p *ShippingPackage) SourceOrderID() string { return p.sourceOrderID }
+
+// WeightG returns the manifested weight in grams (0 when the producer
+// omitted it); the bill of lading sums it.
+func (p *ShippingPackage) WeightG() float64 { return p.weightG }
 
 // WorkUnitRef returns the manifested order_ref, stored verbatim.
 func (p *ShippingPackage) WorkUnitRef() string { return p.workUnitRef }

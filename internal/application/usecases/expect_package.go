@@ -1,0 +1,161 @@
+package usecases
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/claudioed/outbound-shipping/internal/application/ports"
+	"github.com/claudioed/outbound-shipping/internal/application/repository"
+	"github.com/claudioed/outbound-shipping/internal/domain/outboundload"
+	"github.com/claudioed/outbound-shipping/internal/domain/shared"
+	"github.com/claudioed/outbound-shipping/internal/domain/shippingpackage"
+)
+
+// ExpectPackage is the PackageManifested policy pair (model.yaml):
+// PlanLoadFromCutoff — with no open load for the manifest's
+// (site, cpt, operating date, ship method), plan one from the local CPT copy
+// — and AssignPackageToLoad — record the package as EXPECTED on that load.
+//
+// The one-open-load race (two packages of one cutoff manifesting
+// simultaneously) is settled by the partial unique index
+// uq_open_load_per_cutoff: the losing Plan INSERT fails with
+// repository.ErrDuplicateOpenLoad and its whole unit of work — claim included
+// — rolls back; Handle then retries the ENTIRE application once on a fresh
+// transaction, which re-claims the id and finds the winner's committed load.
+// Both packages land on the ONE load (proven by the concurrency integration
+// test).
+type ExpectPackage struct {
+	Intake
+	Loads    ports.LoadRepo
+	Packages ports.PackageRepo
+	Copies   ports.CptCopy
+	Sink     ports.EventSink
+	IDs      ports.LoadIDs
+	Clock    ports.Clock
+}
+
+// Manifest is one PackageManifested, decoded from the producer's payload.
+// SiteID, SourceOrderID, Cutoff and WeightG are the additive fields of ADR
+// 0003: the producer omits each when unknown, and the zero values here mean
+// "unknown". OrderRef is stored verbatim and never parsed.
+type Manifest struct {
+	PackageID     shared.PackageID
+	SiteID        shared.SiteID
+	SourceOrderID string
+	OrderRef      string
+	Cutoff        time.Time // the manifested cpt instant; zero when unknown
+	WeightG       float64
+	ManifestedAt  time.Time
+}
+
+// Handle applies one manifestation, retrying once when the one-open-load
+// race backstop fired.
+func (uc *ExpectPackage) Handle(ctx context.Context, eventID string, m Manifest) (Outcome, error) {
+	outcome, err := uc.apply(ctx, FulfillmentConsumer, eventID, func(ctx context.Context) (Outcome, error) {
+		return uc.expect(ctx, m)
+	})
+	if errors.Is(err, repository.ErrDuplicateOpenLoad) {
+		return uc.apply(ctx, FulfillmentConsumer, eventID, func(ctx context.Context) (Outcome, error) {
+			return uc.expect(ctx, m)
+		})
+	}
+	return outcome, err
+}
+
+func (uc *ExpectPackage) expect(ctx context.Context, m Manifest) (Outcome, error) {
+	if m.PackageID == "" || m.ManifestedAt.IsZero() {
+		return "", invalidf("manifestation needs package id and time")
+	}
+	if m.SiteID == "" || m.Cutoff.IsZero() {
+		// The producer omits site_id today (spike Q3) and the cpt instant
+		// until its wave-2 change lands: without both there is no cutoff
+		// key, no staging rule and no door, so no load can be planned.
+		// Ignored, not dead-lettered: the shape is valid, the correlation is
+		// simply not there yet (omit-when-unknown, ADR 0003).
+		return OutcomeIgnored, nil
+	}
+	// An already-known package is a redelivery the inbox did not catch: its
+	// assignment stands (one load at a time, the domain's own rule).
+	if _, err := uc.Packages.Get(ctx, m.PackageID); err == nil {
+		return OutcomeApplied, nil
+	} else if !errors.Is(err, repository.ErrPackageNotFound) {
+		return "", err
+	}
+
+	schedule, err := uc.Copies.Get(ctx, m.SiteID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCptScheduleUnknown) {
+			return OutcomeIgnored, nil
+		}
+		return "", err
+	}
+	cpt, date, method, err := ResolveCutoff(schedule, m.Cutoff)
+	if err != nil {
+		if errors.Is(err, repository.ErrCptNotFound) {
+			return OutcomeIgnored, nil
+		}
+		return "", err
+	}
+	key := outboundload.LoadKey{Site: m.SiteID, Cpt: cpt, OperatingDate: date, ShipMethod: method}
+
+	pkg, err := shippingpackage.Expect(shippingpackage.ExpectInput{
+		PackageID: m.PackageID, Site: m.SiteID, SourceOrderID: m.SourceOrderID,
+		WorkUnitRef: m.OrderRef, WeightG: m.WeightG, At: uc.Clock.Now(),
+	})
+	if err != nil {
+		return "", invalid(err)
+	}
+
+	load, planned, err := uc.findOrPlan(ctx, key, m.Cutoff)
+	if err != nil {
+		return "", err
+	}
+	if err := pkg.AssignToLoad(load.ID()); err != nil {
+		return "", err
+	}
+	if err := uc.Packages.Save(ctx, pkg, 0); err != nil {
+		return "", err
+	}
+	if planned {
+		if err := uc.Sink.PublishLoadEvents(ctx, load.PullEvents()...); err != nil {
+			return "", err
+		}
+	}
+	return OutcomeApplied, nil
+}
+
+// findOrPlan returns the open load of key, planning it (LoadPlanned) when
+// there is none. planned reports whether this call planned it. The insert of
+// a raced plan fails on uq_open_load_per_cutoff and surfaces
+// repository.ErrDuplicateOpenLoad, which Handle retries on a fresh
+// transaction.
+func (uc *ExpectPackage) findOrPlan(ctx context.Context, key outboundload.LoadKey, cutoff time.Time) (load *outboundload.OutboundLoad, planned bool, err error) {
+	load, err = uc.Loads.FindOpenByKey(ctx, key)
+	if err != nil {
+		if !errors.Is(err, repository.ErrLoadNotFound) {
+			return nil, false, err
+		}
+	} else {
+		return load, false, nil
+	}
+	open, err := uc.Loads.OpenLoadKeys(ctx, key.Site)
+	if err != nil {
+		return nil, false, err
+	}
+	fresh, events, err := outboundload.Plan(outboundload.PlanInput{
+		LoadID: uc.IDs.NewLoadID(), Site: key.Site, Cpt: key.Cpt,
+		OperatingDate: key.OperatingDate, ShipMethod: key.ShipMethod,
+		Cutoff: cutoff, At: uc.Clock.Now(), OpenLoadKeys: open,
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	if err := uc.Loads.Save(ctx, fresh, 0); err != nil {
+		return nil, false, err
+	}
+	if err := uc.Sink.PublishLoadEvents(ctx, events...); err != nil {
+		return nil, false, err
+	}
+	return fresh, true, nil
+}
