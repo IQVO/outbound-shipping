@@ -1,0 +1,1002 @@
+openapi: 3.1.0
+
+info:
+  title: Outbound Shipping API
+  version: 1.0.0
+  contact:
+    name: outbound-shipping maintainers
+    url: https://github.com/IQVO/outbound-shipping
+    email: outbound-shipping@iqvo.example.com
+  license:
+    name: UNLICENSED
+  description: |
+    Commands and queries of the **outbound-shipping** bounded context (WMS
+    subdomain, ADR 0001): staging manifested packages at the door, planning
+    and loading the outbound load for one cutoff, closing and ship-confirming
+    it on the trailer's physical departure (ADR 0002), and issuing the bill
+    of lading.
+
+    **Routes.** Every route below is the domain model's `rest` list verbatim:
+    dock operators drive package scans (`stagings`, `loadings`,
+    `unloadings`), dock supervisors decide loads (`closures`, `reopenings`,
+    `cancellations`, BOL `voids`), and a scheduler sweeps missed loads. The
+    service is written through a transactional outbox: a REST command
+    persists the aggregate AND its already-encoded CloudEvents in one
+    transaction; a relay drains them to Kafka
+    (`warehouse.outbound-shipping.events`, ADR 0005).
+
+    **Idempotency.** Every POST takes an `Idempotency-Key` (fleet REST
+    guideline R3): the first request executes, a replay returns the original
+    response with `Idempotency-Replayed: true`, and a key reused with a
+    DIFFERENT body is a `409 idempotency-key-reused` (R4).
+
+    **Errors** are RFC 9457 problem+json with a fleet `code`. The domain
+    refusals map 1:1 to the model's invariant errors, e.g.
+    `409 packages-outstanding` (`ErrPackagesOutstanding`),
+    `409 load-not-closed` (`ErrLoadNotClosed`),
+    `422 not-staging-location` (`ErrNotStagingLocation`).
+
+servers:
+  - url: https://outbound-shipping.warehouse-systems.internal
+    description: In-cluster (Kong route /api/outbound-shipping)
+
+tags:
+  - name: Packages
+    description: >
+      Package scans on the dock — stage, load and unload
+      (EXPECTED, STAGED, LOADED).
+  - name: Loads
+    description: >
+      The outbound load for one (site, cutoff, date, ship method) — close,
+      reopen, cancel, read.
+  - name: Bills of lading
+    description: The shipping document of one confirmed load; one per load in v1 (ADR 0001).
+  - name: Sweeps
+    description: Scheduled commands (cron) — the missed-load sweep at cutoff.
+  - name: Reports
+    description: Read-only analytical views (load adherence).
+  - name: Health
+    description: Liveness and readiness probes.
+
+paths:
+  /packages/{packageId}/stagings:
+    parameters:
+      - $ref: '#/components/parameters/PackageId'
+    post:
+      operationId: stagePackage
+      summary: Stage a manifested package (create a staging)
+      description: |
+        Moves an `EXPECTED` package to `STAGED` at a staging location and
+        publishes `PackageStaged`. The location must be a facility-layout
+        `Staging` location of the package's site (`422 not-staging-location`
+        otherwise, `ErrNotStagingLocation`). Scan-driven and idempotent per
+        key: replaying the same key re-stages nothing.
+      tags: [Packages]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StagePackageRequest'
+      responses:
+        '200':
+          description: The package is STAGED (or was already).
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingPackage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/PackageNotFound'
+        '409':
+          $ref: '#/components/responses/PackageConflict'
+        '422':
+          $ref: '#/components/responses/NotStagingLocation'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /packages/{packageId}/loadings:
+    parameters:
+      - $ref: '#/components/parameters/PackageId'
+    post:
+      operationId: loadPackage
+      summary: Load a package onto its load (create a loading)
+      description: |
+        Moves a `STAGED` or `EXPECTED` package to `LOADED` through the named
+        door and publishes `PackageLoaded`. The package loads only onto its
+        own load and through that load's door: another load id or another
+        door is `409 wrong-load` (`ErrWrongLoad`); a package already on
+        another load is `409 package-on-another-load`
+        (`ErrPackageOnAnotherLoad`).
+      tags: [Packages]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoadPackageRequest'
+      responses:
+        '200':
+          description: The package is LOADED.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingPackage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/PackageNotFound'
+        '409':
+          $ref: '#/components/responses/PackageConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /packages/{packageId}/unloadings:
+    parameters:
+      - $ref: '#/components/parameters/PackageId'
+    post:
+      operationId: unloadPackage
+      summary: Unload a package back to staging (create an unloading)
+      description: |
+        Moves a `LOADED` package back to `STAGED` and publishes
+        `PackageUnloaded` with the operator's reason. Unloading is only
+        possible before the load is ship-confirmed: once the package is
+        `SHIPPED` it refuses with `409 already-shipped`
+        (`ErrAlreadyShipped`) — the truck has left.
+      tags: [Packages]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnloadPackageRequest'
+      responses:
+        '200':
+          description: The package is STAGED again.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ShippingPackage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/PackageNotFound'
+        '409':
+          $ref: '#/components/responses/PackageConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loads/{loadId}/closures:
+    parameters:
+      - $ref: '#/components/parameters/LoadId'
+    post:
+      operationId: closeLoad
+      summary: Close a loading load (create a closure)
+      description: |
+        Moves a `LOADING` load to `CLOSED` and publishes `LoadClosed` with
+        the package and short-shipped counts. A load closes only when every
+        assigned package is loaded or short-shipped with a reason: any
+        package still outstanding is `409 packages-outstanding`
+        (`ErrPackagesOutstanding`). Short-ships are recorded in the same
+        command, each with its reason.
+      tags: [Loads]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CloseLoadRequest'
+      responses:
+        '200':
+          description: The load is CLOSED.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundLoad'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/LoadNotFound'
+        '409':
+          $ref: '#/components/responses/LoadConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loads/{loadId}/reopenings:
+    parameters:
+      - $ref: '#/components/parameters/LoadId'
+    post:
+      operationId: reopenLoad
+      summary: Reopen a closed load (create a reopening)
+      description: |
+        Moves a `CLOSED` load back to `LOADING` and publishes `LoadReopened`
+        so yard-management reopens the door work. A `SHIP_CONFIRMED` load
+        never changes: `409 load-confirmed` (`ErrLoadConfirmed`).
+      tags: [Loads]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReopenLoadRequest'
+      responses:
+        '200':
+          description: The load is LOADING again.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundLoad'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/LoadNotFound'
+        '409':
+          $ref: '#/components/responses/LoadConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loads/{loadId}/cancellations:
+    parameters:
+      - $ref: '#/components/parameters/LoadId'
+    post:
+      operationId: cancelLoad
+      summary: Cancel a planned load (create a cancellation)
+      description: |
+        Moves a `PLANNED` load to `CANCELLED` and publishes `LoadCancelled`.
+        Only a `PLANNED` load can be cancelled — a load already `LOADING`
+        must be resolved instead (short-ship and close, or reopen later): the
+        refusal is `409 load-state` (`ErrInvalidTransition`). A
+        `SHIP_CONFIRMED` load refuses with `409 load-confirmed`.
+      tags: [Loads]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelLoadRequest'
+      responses:
+        '200':
+          description: The load is CANCELLED.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundLoad'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/LoadNotFound'
+        '409':
+          $ref: '#/components/responses/LoadConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /bills-of-lading/{bolNumber}/voids:
+    parameters:
+      - $ref: '#/components/parameters/BolNumber'
+    post:
+      operationId: voidBillOfLading
+      summary: Void an issued bill of lading (create a void)
+      description: |
+        Moves an `ISSUED` bill of lading to `VOIDED` and publishes
+        `BillOfLadingVoided` with the reason. The document of a departed
+        load is voided only by a supervisor decision (e.g. a re-issued
+        document); the shipment itself is not undone.
+      tags: [Bills of lading]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoidBillOfLadingRequest'
+      responses:
+        '200':
+          description: The bill of lading is VOIDED.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillOfLading'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/BolNotFound'
+        '409':
+          $ref: '#/components/responses/BolConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loads:
+    get:
+      operationId: listLoads
+      summary: List outbound loads (keyset paginated)
+      description: |
+        Loads newest-first by creation, filtered by `site_id`, `state` and
+        `operating_date`. Keyset pagination (fleet guideline R7): pass the
+        `nextCursor` of the previous page; `limit` defaults to 50 and is
+        capped at 200.
+      tags: [Loads]
+      parameters:
+        - $ref: '#/components/parameters/SiteIdQuery'
+        - $ref: '#/components/parameters/LoadStateQuery'
+        - $ref: '#/components/parameters/OperatingDateQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of loads.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoadPage'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loads/{loadId}:
+    parameters:
+      - $ref: '#/components/parameters/LoadId'
+    get:
+      operationId: getLoad
+      summary: Read one outbound load
+      description: |
+        The load with its state, cutoff key (site, cpt, operating date, ship
+        method), door and trailer, and the counts behind the Load Board view.
+      tags: [Loads]
+      responses:
+        '200':
+          description: The load.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutboundLoad'
+        '404':
+          $ref: '#/components/responses/LoadNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /loads/{loadId}/packages:
+    parameters:
+      - $ref: '#/components/parameters/LoadId'
+    get:
+      operationId: listLoadPackages
+      summary: List the packages of one load (keyset paginated)
+      description: |
+        Every package assigned to the load with its state, so the dock
+        supervisor can see expected vs staged vs loaded before closing
+        (`ErrPackagesOutstanding` is the refusal when this list is not all
+        LOADED/SHORT_SHIPPED). Keyset pagination (R7).
+      tags: [Loads]
+      parameters:
+        - $ref: '#/components/parameters/PackageStateQuery'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: One page of packages.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoadPackagePage'
+        '404':
+          $ref: '#/components/responses/LoadNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /bills-of-lading/{bolNumber}:
+    parameters:
+      - $ref: '#/components/parameters/BolNumber'
+    get:
+      operationId: getBillOfLading
+      summary: Read one bill of lading
+      description: |
+        The issued document of a confirmed load: carrier, SCAC, trailer,
+        seal, package count and total weight. `ISSUED` or `VOIDED`.
+      tags: [Bills of lading]
+      responses:
+        '200':
+          description: The bill of lading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BillOfLading'
+        '404':
+          $ref: '#/components/responses/BolNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /missed-load-sweeps:
+    post:
+      operationId: runMissedLoadSweep
+      summary: Sweep for packages that missed their load (create a sweep)
+      description: |
+        Cron-driven (the scheduler calls it at each cutoff): every `EXPECTED`
+        or `STAGED` package whose cutoff has passed raises `PackageMissedLoad`
+        exactly once — a re-run sweep publishes nothing new (the flagged fact
+        is remembered on the package). Idempotent per key like every POST.
+      tags: [Sweeps]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MissedLoadSweepRequest'
+      responses:
+        '200':
+          description: The sweep ran; the body counts what it flagged now.
+          headers:
+            Idempotency-Replayed:
+              $ref: '#/components/headers/IdempotencyReplayed'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MissedLoadSweepResult'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/SweepConflict'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /reports/load-adherence:
+    get:
+      operationId: getLoadAdherenceReport
+      summary: Per-cutoff load adherence report
+      description: |
+        Read-only analytical view (projector-fed, not the OLTP store): per
+        site and cutoff, how many loads closed before their cutoff, how many
+        packages missed, and the adherence percentage. A report view, so it
+        is pagination-exempt (R7 `report`).
+      tags: [Reports]
+      x-pagination-exempt: report
+      parameters:
+        - $ref: '#/components/parameters/SiteIdQuery'
+        - $ref: '#/components/parameters/OperatingDateQuery'
+      responses:
+        '200':
+          description: Adherence rows for the requested scope.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoadAdherenceReport'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /healthz:
+    get:
+      operationId: getLiveness
+      summary: Liveness probe
+      description: Process is up; no dependency checks.
+      tags: [Health]
+      responses:
+        '200':
+          description: Alive.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /readyz:
+    get:
+      operationId: getReadiness
+      summary: Readiness probe
+      description: Database reachable and migrations applied; consumers connected.
+      tags: [Health]
+      responses:
+        '200':
+          description: Ready to serve.
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    PackageId:
+      name: packageId
+      in: path
+      required: true
+      description: The manifested package id (fulfillment-execution's package id).
+      schema:
+        $ref: '#/components/schemas/PackageId'
+    LoadId:
+      name: loadId
+      in: path
+      required: true
+      description: The outbound load id.
+      schema:
+        $ref: '#/components/schemas/LoadId'
+    BolNumber:
+      name: bolNumber
+      in: path
+      required: true
+      description: The bill of lading number.
+      schema:
+        $ref: '#/components/schemas/BolNumber'
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Caller-minted key (fleet guideline R3-R5). First use executes; a
+        replay returns the stored response with `Idempotency-Replayed: true`;
+        a key reused with a different body is `409 idempotency-key-reused`.
+      schema:
+        type: string
+        minLength: 16
+        maxLength: 128
+        examples: [stage-pkg-1029-20261106-req-01]
+    SiteIdQuery:
+      name: site_id
+      in: query
+      description: Filter by facility-layout site code.
+      schema:
+        $ref: '#/components/schemas/SiteId'
+    LoadStateQuery:
+      name: state
+      in: query
+      description: Filter by load state.
+      schema:
+        $ref: '#/components/schemas/LoadState'
+    PackageStateQuery:
+      name: state
+      in: query
+      description: Filter by package state.
+      schema:
+        $ref: '#/components/schemas/PackageState'
+    OperatingDateQuery:
+      name: operating_date
+      in: query
+      description: Filter by operating date (YYYY-MM-DD, UTC).
+      schema:
+        type: string
+        format: date
+        examples: ["2026-11-06"]
+    Limit:
+      name: limit
+      in: query
+      description: Page size (R7); default 50, max 200.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      description: Opaque keyset cursor from the previous page's nextCursor (R7).
+      schema:
+        type: string
+
+  headers:
+    IdempotencyReplayed:
+      description: True when this response was replayed from a stored idempotent execution (R5).
+      schema:
+        type: boolean
+        enum: [true]
+
+  responses:
+    BadRequest:
+      description: Malformed body or a missing/invalid required field (`bad-request`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalError:
+      description: Unexpected failure (`internal-error`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PackageNotFound:
+      description: No such package (`package-not-found`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    LoadNotFound:
+      description: No such load (`load-not-found`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BolNotFound:
+      description: No such bill of lading (`bol-not-found`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PackageConflict:
+      description: |
+        Package refusal: `already-shipped` (unload after ship-confirm),
+        `wrong-load`, `package-on-another-load`, `package-state`, or
+        `idempotency-key-reused`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    LoadConflict:
+      description: |
+        Load refusal: `packages-outstanding`, `trailer-not-docked`,
+        `load-not-closed`, `load-confirmed`, `duplicate-open-load`,
+        `load-state`, or `idempotency-key-reused`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    BolConflict:
+      description: |
+        Bill of lading refusal: `bol-already-issued`, `bol-already-voided`,
+        `seal-missing`, `load-not-closed`, or `idempotency-key-reused`.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    SweepConflict:
+      description: Sweep refusal (`idempotency-key-reused`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotStagingLocation:
+      description: The location is not a Staging location of the package's site (`not-staging-location`).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    SiteId:
+      type: string
+      minLength: 1
+      examples: ["SITE-1"]
+    CptId:
+      type: string
+      minLength: 1
+      description: The cutoff (CPT) id from the local CPT schedule copy.
+      examples: ["cpt-1600"]
+    LoadId:
+      type: string
+      minLength: 1
+      examples: ["load-7f3a"]
+    PackageId:
+      type: string
+      minLength: 1
+      examples: ["pkg-1029"]
+    BolNumber:
+      type: string
+      minLength: 1
+      examples: ["BOL-2026-11-06-0042"]
+    ShipMethod:
+      type: string
+      minLength: 1
+      description: Carrier ship method (carrier + service level).
+      examples: ["STDOUT-2DAY"]
+    LoadState:
+      type: string
+      enum: [PLANNED, LOADING, CLOSED, SHIP_CONFIRMED, CANCELLED]
+    PackageState:
+      type: string
+      enum: [EXPECTED, STAGED, LOADED, SHIPPED, SHORT_SHIPPED]
+    BolState:
+      type: string
+      enum: [ISSUED, VOIDED]
+    Problem:
+      type: object
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          description: Stable fleet error code (e.g. `packages-outstanding`).
+          examples: ["packages-outstanding"]
+        detail:
+          type: string
+
+    StagePackageRequest:
+      type: object
+      required: [staging_location]
+      properties:
+        staging_location:
+          type: string
+          description: The facility-layout location code; must be a Staging location of the package's site.
+          examples: ["STG-D04-A"]
+
+    LoadPackageRequest:
+      type: object
+      required: [load_id, door_code]
+      properties:
+        load_id:
+          $ref: '#/components/schemas/LoadId'
+        door_code:
+          type: string
+          description: The door the package goes through; must be the load's assigned door.
+          examples: ["D04"]
+
+    UnloadPackageRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Why the package came back off the load (published on PackageUnloaded).
+          examples: ["damaged-carton"]
+
+    CloseLoadRequest:
+      type: object
+      properties:
+        short_ships:
+          type: array
+          description: Packages deliberately left off the load, each with a reason; recorded on the load.
+          items:
+            $ref: '#/components/schemas/ShortShip'
+
+    ShortShip:
+      type: object
+      required: [package_id, reason]
+      properties:
+        package_id:
+          $ref: '#/components/schemas/PackageId'
+        reason:
+          type: string
+          minLength: 1
+          description: Why the package is not going (e.g. `DIVERTED`, `DAMAGED`, `NO-STOCK`).
+          examples: ["DIVERTED"]
+
+    ReopenLoadRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+          description: Why the supervisor reopened the load.
+
+    CancelLoadRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          description: Why the planned load is cancelled.
+
+    VoidBillOfLadingRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          description: Why the document is voided (the shipment itself stands).
+
+    MissedLoadSweepRequest:
+      type: object
+      required: [site_id]
+      properties:
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        cutoff:
+          type: string
+          format: date-time
+          description: Sweep everything at or before this cutoff; defaults to now.
+
+    MissedLoadSweepResult:
+      type: object
+      required: [flagged]
+      properties:
+        flagged:
+          type: integer
+          minimum: 0
+          description: Packages newly flagged by THIS run (re-runs flag nothing).
+        swept_at:
+          type: string
+          format: date-time
+
+    OutboundLoad:
+      type: object
+      required: [id, site_id, cpt_id, operating_date, ship_method, cutoff, state, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/LoadId'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        cpt_id:
+          $ref: '#/components/schemas/CptId'
+        operating_date:
+          type: string
+          format: date
+        ship_method:
+          $ref: '#/components/schemas/ShipMethod'
+        cutoff:
+          type: string
+          format: date-time
+        state:
+          $ref: '#/components/schemas/LoadState'
+        door_code:
+          type: string
+          description: Assigned door, once an outbound appointment named the cpt.
+        trailer_id:
+          type: string
+          description: The docked trailer attached to the load.
+        appointment_id:
+          type: string
+        short_ships:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShortShip'
+        package_count:
+          type: integer
+          minimum: 0
+          description: Loaded packages at close.
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Aggregate version after the last change.
+
+    ShippingPackage:
+      type: object
+      required: [id, site_id, state, version]
+      properties:
+        id:
+          $ref: '#/components/schemas/PackageId'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        source_order_id:
+          type: string
+          description: order-management OrderId from PackageManifested (ADR 0003); omitted when the producer did not know it.
+        work_unit_ref:
+          type: string
+          description: The manifested order_ref, stored verbatim and never parsed.
+        load_id:
+          $ref: '#/components/schemas/LoadId'
+        staging_location:
+          type: string
+        state:
+          $ref: '#/components/schemas/PackageState'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    BillOfLading:
+      type: object
+      required: [bol_number, load_id, site_id, carrier, seal_number, package_count, state, version]
+      properties:
+        bol_number:
+          $ref: '#/components/schemas/BolNumber'
+        load_id:
+          $ref: '#/components/schemas/LoadId'
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        carrier:
+          type: string
+        carrier_scac:
+          type: string
+          description: Nullable on the source appointment; omitted when null.
+        trailer_id:
+          type: string
+        seal_number:
+          type: string
+          description: The seal yard-management recorded on departure (ErrSealMissing without it).
+        package_count:
+          type: integer
+          minimum: 1
+        total_weight_g:
+          type: number
+          description: Sum of the shipped packages' weight_g, when known.
+        issued_at:
+          type: string
+          format: date-time
+        voided_at:
+          type: string
+          format: date-time
+        void_reason:
+          type: string
+        state:
+          $ref: '#/components/schemas/BolState'
+        version:
+          type: integer
+          format: int64
+          minimum: 1
+
+    LoadPage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutboundLoad'
+        nextCursor:
+          type:
+            - string
+            - 'null'
+          description: Cursor of the next page (R7); null after the last.
+
+    LoadPackagePage:
+      type: object
+      required: [items, nextCursor]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShippingPackage'
+        nextCursor:
+          type:
+            - string
+            - 'null'
+
+    LoadAdherenceRow:
+      type: object
+      required: [site_id, cpt_id, operating_date, loads_closed, loads_total, packages_missed, adherence]
+      properties:
+        site_id:
+          $ref: '#/components/schemas/SiteId'
+        cpt_id:
+          $ref: '#/components/schemas/CptId'
+        operating_date:
+          type: string
+          format: date
+        loads_closed:
+          type: integer
+          minimum: 0
+          description: Loads closed at or before their cutoff.
+        loads_total:
+          type: integer
+          minimum: 0
+        packages_missed:
+          type: integer
+          minimum: 0
+          description: Distinct packages that raised PackageMissedLoad.
+        adherence:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: loads_closed / loads_total (0 when loads_total is 0).
+
+    LoadAdherenceReport:
+      type: object
+      required: [rows]
+      properties:
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/LoadAdherenceRow'
+        generated_at:
+          type: string
+          format: date-time
