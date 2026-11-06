@@ -23,10 +23,10 @@ COVERAGE_THRESHOLD := 90
 
 # The fast mutation subset — kept in sync with the `mutation-fast` CI job.
 # Thresholds/workers/timeout live in .gremlins.yaml so both use identical
-# settings. Pick your richest, most behaviourally-dense aggregate here —
-# not necessarily the biggest package, the one with the most branching
-# domain logic (see HARNESS.md's mutation-testing section).
-MUTATION_FAST_PKG  := ./internal/domain/outboundload
+# settings. The fast gate loops over EVERY domain package (skill 5c: the
+# template's single-package gate goes stale the moment a second aggregate
+# lands), one at a time so workers never contend over the build cache.
+MUTATION_FAST_PKGS := shared outboundload shippingpackage billoflading
 # The exhaustive scheduled run — kept in sync with the `mutation` CI job.
 MUTATION_FULL_PKG  := ./internal/domain
 
@@ -122,7 +122,10 @@ mutation:
 		echo "  go install github.com/go-gremlins/gremlins/cmd/gremlins@$(GREMLINS_VERSION)"; \
 		exit 1; \
 	fi
-	$(GREMLINS) unleash $(MUTATION_FAST_PKG)
+	@for pkg in $(MUTATION_FAST_PKGS); do \
+		echo "gremlins: ./internal/domain/$$pkg"; \
+		$(GREMLINS) unleash ./internal/domain/$$pkg || exit 1; \
+	done
 
 mutation-full:
 	@if ! command -v $(GREMLINS) >/dev/null 2>&1; then \
