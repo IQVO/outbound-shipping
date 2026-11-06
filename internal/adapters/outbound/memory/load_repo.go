@@ -190,27 +190,38 @@ func (r *LoadRepo) FindLatestByTrailer(_ context.Context, site shared.SiteID, tr
 func (r *LoadRepo) List(_ context.Context, filter repository.LoadFilter, after shared.LoadID, limit int) ([]*outboundload.OutboundLoad, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	type entry struct {
-		id        shared.LoadID
-		createdAt time.Time
-		load      *outboundload.OutboundLoad
-	}
-	var entries []entry
+	var entries []loadEntry
 	for _, id := range r.order {
 		row := r.rows[id]
-		l := row.load
-		if filter.Site != "" && l.SiteID() != filter.Site {
-			continue
+		if matchesLoadFilter(row.load, filter) {
+			entries = append(entries, loadEntry{id: id, createdAt: row.createdAt, load: row.load})
 		}
-		if filter.State != "" && l.State() != filter.State {
-			continue
-		}
-		if filter.OperatingDate != "" && l.OperatingDate() != filter.OperatingDate {
-			continue
-		}
-		entries = append(entries, entry{id: id, createdAt: row.createdAt, load: l})
 	}
-	// newest first: created_at desc, then id desc
+	sortEntriesNewestFirst(entries)
+	return pageEntries(entries, after, limit)
+}
+
+// matchesLoadFilter reports whether l passes every set filter field.
+func matchesLoadFilter(l *outboundload.OutboundLoad, filter repository.LoadFilter) bool {
+	if filter.Site != "" && l.SiteID() != filter.Site {
+		return false
+	}
+	if filter.State != "" && l.State() != filter.State {
+		return false
+	}
+	return filter.OperatingDate == "" || l.OperatingDate() == filter.OperatingDate
+}
+
+// loadEntry is one List candidate: the row's identity, creation instant and
+// aggregate.
+type loadEntry struct {
+	id        shared.LoadID
+	createdAt time.Time
+	load      *outboundload.OutboundLoad
+}
+
+// sortEntriesNewestFirst sorts in place: created_at desc, then id desc.
+func sortEntriesNewestFirst(entries []loadEntry) {
 	for i := len(entries) - 1; i > 0; i-- {
 		for j := 0; j < i; j++ {
 			a, b := entries[j], entries[j+1]
@@ -219,6 +230,11 @@ func (r *LoadRepo) List(_ context.Context, filter repository.LoadFilter, after s
 			}
 		}
 	}
+}
+
+// pageEntries rehydrates the first `limit` entries after the `after` id
+// ("" = from the start), newest first.
+func pageEntries(entries []loadEntry, after shared.LoadID, limit int) ([]*outboundload.OutboundLoad, error) {
 	started := after == ""
 	out := make([]*outboundload.OutboundLoad, 0, limit)
 	for _, e := range entries {

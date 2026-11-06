@@ -32,10 +32,6 @@ type closeLoadRequest struct {
 	ShortShips []shortShipJSON `json:"short_ships"`
 }
 
-type reopenLoadRequest struct {
-	Reason string `json:"reason"`
-}
-
 type cancelLoadRequest struct {
 	Reason string `json:"reason"`
 }

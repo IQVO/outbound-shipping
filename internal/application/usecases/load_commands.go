@@ -38,41 +38,9 @@ func (uc *CloseLoad) Handle(ctx context.Context, loadID shared.LoadID, shortShip
 		if err != nil {
 			return err
 		}
-		byID := make(map[shared.PackageID]*shippingpackage.ShippingPackage, len(pkgs))
-		for _, p := range pkgs {
-			byID[p.ID()] = p
-		}
-		short := make([]shared.ShortShip, 0, len(shortShips)+len(pkgs))
-		short = append(short, shortShips...)
-		var outstanding []shared.PackageID
-		loaded := 0
-		for _, p := range pkgs {
-			switch p.State() {
-			case shippingpackage.StateLoaded, shippingpackage.StateShipped:
-				loaded++
-			case shippingpackage.StateShortShipped:
-				// Already short-shipped by the DropDiverted policy: record
-				// it on the load with the same reason.
-				short = append(short, shared.ShortShip{PackageID: p.ID(), Reason: "DIVERTED"})
-			default:
-				outstanding = append(outstanding, p.ID())
-			}
-		}
-		// Apply the operator's short-ships to the packages.
-		for _, s := range shortShips {
-			p, ok := byID[s.PackageID]
-			if !ok {
-				return repository.ErrPackageNotFound
-			}
-			if p.State() == shippingpackage.StateShortShipped {
-				continue
-			}
-			if err := p.MarkShortShipped(s.Reason, uc.Clock.Now()); err != nil {
-				return err
-			}
-			if err := uc.Pkgs.Save(ctx, p, p.Version()-1); err != nil {
-				return err
-			}
+		short, outstanding, loaded, err := uc.applyShortShips(ctx, pkgs, shortShips)
+		if err != nil {
+			return err
 		}
 		if err := l.CloseLoad(outboundload.CloseInput{
 			OutstandingPackages: outstanding, ShortShips: short,
@@ -93,6 +61,49 @@ func (uc *CloseLoad) Handle(ctx context.Context, loadID shared.LoadID, shortShip
 		return nil, err
 	}
 	return load, nil
+}
+
+// applyShortShips marks the commanded short-ships on their packages (a
+// package already SHORT_SHIPPED by the DropDiverted policy keeps its state)
+// and reports the close's inputs: the full short-ship record (commanded plus
+// already-diverted), the packages still outstanding and the loaded count.
+func (uc *CloseLoad) applyShortShips(ctx context.Context, pkgs []*shippingpackage.ShippingPackage, shortShips []shared.ShortShip) ([]shared.ShortShip, []shared.PackageID, int, error) {
+	byID := make(map[shared.PackageID]*shippingpackage.ShippingPackage, len(pkgs))
+	for _, p := range pkgs {
+		byID[p.ID()] = p
+	}
+	short := make([]shared.ShortShip, 0, len(shortShips)+len(pkgs))
+	short = append(short, shortShips...)
+	var outstanding []shared.PackageID
+	loaded := 0
+	for _, p := range pkgs {
+		switch p.State() {
+		case shippingpackage.StateLoaded, shippingpackage.StateShipped:
+			loaded++
+		case shippingpackage.StateShortShipped:
+			// Already short-shipped by the DropDiverted policy: record
+			// it on the load with the same reason.
+			short = append(short, shared.ShortShip{PackageID: p.ID(), Reason: "DIVERTED"})
+		default:
+			outstanding = append(outstanding, p.ID())
+		}
+	}
+	for _, s := range shortShips {
+		p, ok := byID[s.PackageID]
+		if !ok {
+			return nil, nil, 0, repository.ErrPackageNotFound
+		}
+		if p.State() == shippingpackage.StateShortShipped {
+			continue
+		}
+		if err := p.MarkShortShipped(s.Reason, uc.Clock.Now()); err != nil {
+			return nil, nil, 0, err
+		}
+		if err := uc.Pkgs.Save(ctx, p, p.Version()-1); err != nil {
+			return nil, nil, 0, err
+		}
+	}
+	return short, outstanding, loaded, nil
 }
 
 // loadAll pages through every package of the load.

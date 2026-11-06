@@ -91,31 +91,9 @@ func (uc *OnDeparture) confirm(ctx context.Context, load *outboundload.OutboundL
 	if err != nil {
 		return "", err
 	}
-	orders := make([]string, 0, len(pkgs))
-	weight := 0.0
-	shipped := 0
-	for _, p := range pkgs {
-		switch p.State() {
-		case shippingpackage.StateLoaded:
-			if err := p.MarkShipped(at); err != nil {
-				return "", err
-			}
-			if err := uc.Packages.Save(ctx, p, p.Version()-1); err != nil {
-				return "", err
-			}
-			shipped++
-			weight += p.WeightG()
-			if p.SourceOrderID() != "" {
-				orders = append(orders, p.SourceOrderID())
-			}
-		case shippingpackage.StateShipped:
-			// A partial crash between the package saves: count it.
-			shipped++
-			weight += p.WeightG()
-			if p.SourceOrderID() != "" {
-				orders = append(orders, p.SourceOrderID())
-			}
-		}
+	shipped, weight, orders, err := uc.markShipped(ctx, pkgs, at)
+	if err != nil {
+		return "", err
 	}
 	carrier, scac := uc.carrierOf(ctx, load)
 	if err := load.ConfirmShipment(outboundload.ConfirmInput{
@@ -148,6 +126,35 @@ func (uc *OnDeparture) confirm(ctx context.Context, load *outboundload.OutboundL
 		return "", err
 	}
 	return OutcomeApplied, nil
+}
+
+// markShipped moves every LOADED package to SHIPPED (a SHIPPED one is a
+// partial crash between the package saves: it is only counted) and reports
+// the confirm's inputs: the shipped count, the total weight and the distinct
+// source orders of the shipped packages.
+func (uc *OnDeparture) markShipped(ctx context.Context, pkgs []*shippingpackage.ShippingPackage, at time.Time) (shipped int, weight float64, orders []string, err error) {
+	orders = make([]string, 0, len(pkgs))
+	for _, p := range pkgs {
+		switch p.State() {
+		case shippingpackage.StateLoaded:
+			if err := p.MarkShipped(at); err != nil {
+				return 0, 0, nil, err
+			}
+			if err := uc.Packages.Save(ctx, p, p.Version()-1); err != nil {
+				return 0, 0, nil, err
+			}
+		case shippingpackage.StateShipped:
+			// Counted below with the already-shipped weight and order.
+		default:
+			continue
+		}
+		shipped++
+		weight += p.WeightG()
+		if p.SourceOrderID() != "" {
+			orders = append(orders, p.SourceOrderID())
+		}
+	}
+	return shipped, weight, orders, nil
 }
 
 // flagWithoutClose runs FlagDepartureWithoutClose (the out-of-order case

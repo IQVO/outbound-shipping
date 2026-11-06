@@ -48,27 +48,33 @@ func (uc *DockTrailer) Handle(ctx context.Context, eventID string, d Docking) (O
 			// A docking at a door no open load uses: nothing to attach to.
 			return OutcomeIgnored, nil
 		}
-		load := loads[0] // PLANNED first (repo order)
-		if err := load.AttachTrailer(outboundload.TrailerDocked{
-			TrailerID: d.TrailerID, DoorCode: d.DoorCode, At: at,
-		}); err != nil {
-			return "", err
-		}
-		started := false
-		if load.State() == outboundload.StatePlanned {
-			if err := load.StartLoading(at); err != nil {
-				return "", err
-			}
-			started = true
-		}
-		if err := uc.Loads.Save(ctx, load, load.Version()-1); err != nil {
-			return "", err
-		}
-		if started {
-			if err := uc.Sink.PublishLoadEvents(ctx, load.PullEvents()...); err != nil {
-				return "", err
-			}
-		}
-		return OutcomeApplied, nil
+		return uc.attachAndStart(ctx, loads[0], d, at) // PLANNED first (repo order)
 	})
+}
+
+// attachAndStart attaches the trailer and, on a still-PLANNED load, starts
+// loading (the model's only StartLoading trigger), publishing the load's
+// events when the state moved.
+func (uc *DockTrailer) attachAndStart(ctx context.Context, load *outboundload.OutboundLoad, d Docking, at time.Time) (Outcome, error) {
+	if err := load.AttachTrailer(outboundload.TrailerDocked{
+		TrailerID: d.TrailerID, DoorCode: d.DoorCode, At: at,
+	}); err != nil {
+		return "", err
+	}
+	started := false
+	if load.State() == outboundload.StatePlanned {
+		if err := load.StartLoading(at); err != nil {
+			return "", err
+		}
+		started = true
+	}
+	if err := uc.Loads.Save(ctx, load, load.Version()-1); err != nil {
+		return "", err
+	}
+	if started {
+		if err := uc.Sink.PublishLoadEvents(ctx, load.PullEvents()...); err != nil {
+			return "", err
+		}
+	}
+	return OutcomeApplied, nil
 }

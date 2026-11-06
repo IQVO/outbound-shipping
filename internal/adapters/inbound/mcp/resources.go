@@ -22,7 +22,7 @@ const loadTemplate = "warehouse://outbound-shipping/loads/{loadId}"
 // registerResources adds the load resource (AS-3: tools alone are not an
 // agent surface).
 func (d Deps) registerResources(server *mcp.Server) {
-	mcp.AddResourceTemplate(server, &mcp.ResourceTemplate{
+	server.AddResourceTemplate(&mcp.ResourceTemplate{
 		URITemplate: loadTemplate,
 		Name:        "outbound load",
 		Description: "One outbound load: its cutoff key (site, cpt, operating date, ship method), cutoff instant, " +
@@ -65,7 +65,7 @@ const readinessPrompt = "load-close-readiness"
 
 // registerPrompts adds the close-readiness prompt.
 func (d Deps) registerPrompts(server *mcp.Server) {
-	mcp.AddPrompt(server, &mcp.Prompt{
+	server.AddPrompt(&mcp.Prompt{
 		Name: readinessPrompt,
 		Description: "Summarise whether one site's loads are ready to close before their cutoff: the loads at risk, " +
 			"the packages still outstanding, and what the dock supervisor should do next (load, short-ship with a " +
@@ -75,10 +75,10 @@ func (d Deps) registerPrompts(server *mcp.Server) {
 			Description: "The facility-layout site code to summarise.",
 			Required:    true,
 		}},
-	}, func(_ context.Context, req *mcp.CallToolRequest, args mcp.PromptArguments) (*mcp.CallToolResult, error) {
+	}, func(_ context.Context, req *mcp.GetPromptRequest) (*mcp.GetPromptResult, error) {
 		// The prompt only TEXT; the client's model calls the read tools
 		// itself (L1 authority end to end).
-		site := args["site_id"]
+		site := req.Params.Arguments["site_id"]
 		if site == "" {
 			return nil, errInvalidSiteID
 		}
@@ -88,7 +88,13 @@ func (d Deps) registerPrompts(server *mcp.Server) {
 			"minutes left; call out every package that already missed. Close with the recommended next action per " +
 			"load: finish loading, short-ship named packages with reasons, or let the missed-load sweep flag them. " +
 			"Do not propose any write operation through this server: it is read-only."
-		return &mcp.CallToolResult{Content: []*mcp.Content{{Type: "text", Text: text}}}, nil
+		return &mcp.GetPromptResult{
+			Description: "Close-readiness of one site's outbound loads, from the loads_at_risk and missed_loads tools.",
+			Messages: []*mcp.PromptMessage{{
+				Role:    "user",
+				Content: &mcp.TextContent{Text: text},
+			}},
+		}, nil
 	})
 }
 

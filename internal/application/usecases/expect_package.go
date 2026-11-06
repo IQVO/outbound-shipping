@@ -67,14 +67,6 @@ func (uc *ExpectPackage) expect(ctx context.Context, m Manifest) (Outcome, error
 	if m.PackageID == "" || m.ManifestedAt.IsZero() {
 		return "", invalidf("manifestation needs package id and time")
 	}
-	if m.SiteID == "" || m.Cutoff.IsZero() {
-		// The producer omits site_id today (spike Q3) and the cpt instant
-		// until its wave-2 change lands: without both there is no cutoff
-		// key, no staging rule and no door, so no load can be planned.
-		// Ignored, not dead-lettered: the shape is valid, the correlation is
-		// simply not there yet (omit-when-unknown, ADR 0003).
-		return OutcomeIgnored, nil
-	}
 	// An already-known package is a redelivery the inbox did not catch: its
 	// assignment stands (one load at a time, the domain's own rule).
 	if _, err := uc.Packages.Get(ctx, m.PackageID); err == nil {
@@ -82,22 +74,13 @@ func (uc *ExpectPackage) expect(ctx context.Context, m Manifest) (Outcome, error
 	} else if !errors.Is(err, repository.ErrPackageNotFound) {
 		return "", err
 	}
-
-	schedule, err := uc.Copies.Get(ctx, m.SiteID)
+	key, ok, err := uc.cutoffKey(ctx, m)
 	if err != nil {
-		if errors.Is(err, repository.ErrCptScheduleUnknown) {
-			return OutcomeIgnored, nil
-		}
 		return "", err
 	}
-	cpt, date, method, err := ResolveCutoff(schedule, m.Cutoff)
-	if err != nil {
-		if errors.Is(err, repository.ErrCptNotFound) {
-			return OutcomeIgnored, nil
-		}
-		return "", err
+	if !ok {
+		return OutcomeIgnored, nil
 	}
-	key := outboundload.LoadKey{Site: m.SiteID, Cpt: cpt, OperatingDate: date, ShipMethod: method}
 
 	pkg, err := shippingpackage.Expect(shippingpackage.ExpectInput{
 		PackageID: m.PackageID, Site: m.SiteID, SourceOrderID: m.SourceOrderID,
@@ -123,6 +106,33 @@ func (uc *ExpectPackage) expect(ctx context.Context, m Manifest) (Outcome, error
 		}
 	}
 	return OutcomeApplied, nil
+}
+
+// cutoffKey resolves the manifest's correlation to the load-planning key.
+// ok false means the manifest is Ignored: the producer omits site_id today
+// (spike Q3) and the cpt instant until its wave-2 change lands -- without
+// both there is no cutoff key, no staging rule and no door, so no load can
+// be planned (omit-when-unknown, ADR 0003); a site whose schedule copy is
+// unknown or whose cutoff the site does not run is ignored the same way.
+func (uc *ExpectPackage) cutoffKey(ctx context.Context, m Manifest) (outboundload.LoadKey, bool, error) {
+	if m.SiteID == "" || m.Cutoff.IsZero() {
+		return outboundload.LoadKey{}, false, nil
+	}
+	schedule, err := uc.Copies.Get(ctx, m.SiteID)
+	if err != nil {
+		if errors.Is(err, repository.ErrCptScheduleUnknown) {
+			return outboundload.LoadKey{}, false, nil
+		}
+		return outboundload.LoadKey{}, false, err
+	}
+	cpt, date, method, err := ResolveCutoff(schedule, m.Cutoff)
+	if err != nil {
+		if errors.Is(err, repository.ErrCptNotFound) {
+			return outboundload.LoadKey{}, false, nil
+		}
+		return outboundload.LoadKey{}, false, err
+	}
+	return outboundload.LoadKey{Site: m.SiteID, Cpt: cpt, OperatingDate: date, ShipMethod: method}, true, nil
 }
 
 // findOrPlan returns the open load of key, planning it (LoadPlanned) when
