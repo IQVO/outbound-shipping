@@ -62,7 +62,7 @@ not a preference — there is nothing to "choose" here:
 
 Full standard, subdomain table and the fleet's cross-service type catalogue:
 warehouse-docs `docs/strategic-design/event-standard-cloudevents.md`.
-Recorded in this repo as `docs/adr/0006-cloudevents-envelope-and-type-catalogue.md`.
+Recorded in this repo as `docs/adr/0005-cloudevents-envelope-and-type-catalogue.md`.
 
 ### Published types
 
