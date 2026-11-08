@@ -18,7 +18,9 @@ type BoardStore struct {
 }
 
 // NewBoardStore constructs an empty BoardStore.
-func NewBoardStore() *BoardStore { return &BoardStore{} }
+func NewBoardStore() *BoardStore {
+	return &BoardStore{rows: boardRows{rows: map[shared.LoadID]*repository.LoadBoardRow{}}}
+}
 
 // ApplyLoadPlanned implements usecases.BoardStoreWriter.
 func (s *BoardStore) ApplyLoadPlanned(_ context.Context, load shared.LoadID, site shared.SiteID, cpt shared.CptID, date, method string, cutoff time.Time) error {

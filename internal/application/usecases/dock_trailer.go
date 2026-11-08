@@ -54,8 +54,11 @@ func (uc *DockTrailer) Handle(ctx context.Context, eventID string, d Docking) (O
 
 // attachAndStart attaches the trailer and, on a still-PLANNED load, starts
 // loading (the model's only StartLoading trigger), publishing the load's
-// events when the state moved.
+// events when the state moved. A re-dock at an already-LOADING load attaches
+// silently: AttachTrailer bumps nothing, so the save's expected version is
+// the one the load had BEFORE either command (StartLoading is the only bump).
 func (uc *DockTrailer) attachAndStart(ctx context.Context, load *outboundload.OutboundLoad, d Docking, at time.Time) (Outcome, error) {
+	expected := load.Version()
 	if err := load.AttachTrailer(outboundload.TrailerDocked{
 		TrailerID: d.TrailerID, DoorCode: d.DoorCode, At: at,
 	}); err != nil {
@@ -68,7 +71,7 @@ func (uc *DockTrailer) attachAndStart(ctx context.Context, load *outboundload.Ou
 		}
 		started = true
 	}
-	if err := uc.Loads.Save(ctx, load, load.Version()-1); err != nil {
+	if err := uc.Loads.Save(ctx, load, expected); err != nil {
 		return "", err
 	}
 	if started {
