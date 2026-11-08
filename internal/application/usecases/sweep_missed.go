@@ -37,6 +37,7 @@ func (uc *SweepMissedLoads) Handle(ctx context.Context, site shared.SiteID, cuto
 		for _, s := range due {
 			p := s.Package
 			already := p.MissedFlagged()
+			loaded := p.Version() // a re-flag bumps nothing (the once-guard)
 			if err := p.FlagMissedLoad(s.Cutoff, at); err != nil {
 				// LOADED/SHIPPED are not sweepable; a package with no load
 				// cannot miss one. Defensive skip.
@@ -46,7 +47,7 @@ func (uc *SweepMissedLoads) Handle(ctx context.Context, site shared.SiteID, cuto
 				// The once-guard: a re-run sweep publishes nothing new.
 				continue
 			}
-			if err := uc.Pkgs.Save(ctx, p, p.Version()-1); err != nil {
+			if err := uc.Pkgs.Save(ctx, p, loaded); err != nil {
 				return err
 			}
 			if err := uc.Sink.PublishPackageEvents(ctx, p.PullEvents()...); err != nil {

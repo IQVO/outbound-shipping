@@ -34,11 +34,12 @@ func (uc *DivertPackage) Handle(ctx context.Context, eventID string, packageID s
 			}
 			return "", err
 		}
+		loaded := pkg.Version() // MarkShortShipped raises no event, bumps nothing
 		if err := pkg.MarkShortShipped("DIVERTED", atOr(divertedAt, uc.Clock.Now())); err != nil {
 			// LOADED, SHIPPED or already SHORT_SHIPPED: nothing to drop.
 			return OutcomeIgnored, nil
 		}
-		if err := uc.Packages.Save(ctx, pkg, pkg.Version()-1); err != nil {
+		if err := uc.Packages.Save(ctx, pkg, loaded); err != nil {
 			return "", err
 		}
 		return OutcomeApplied, nil

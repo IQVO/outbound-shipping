@@ -32,13 +32,14 @@ func (uc *StagePackage) Handle(ctx context.Context, packageID shared.PackageID, 
 		if err != nil {
 			return err
 		}
+		loaded := p.Version() // a no-op re-stage bumps nothing
 		if err := p.Stage(shippingpackage.StageInput{
 			Location: location, IsStaging: ok && place.IsStaging(),
 			LocationSite: place.Site, At: uc.Clock.Now(),
 		}); err != nil {
 			return err
 		}
-		if err := uc.Pkgs.Save(ctx, p, p.Version()-1); err != nil {
+		if err := uc.Pkgs.Save(ctx, p, loaded); err != nil {
 			return err
 		}
 		if err := uc.Sink.PublishPackageEvents(ctx, p.PullEvents()...); err != nil {

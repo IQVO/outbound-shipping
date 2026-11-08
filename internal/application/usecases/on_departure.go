@@ -137,10 +137,11 @@ func (uc *OnDeparture) markShipped(ctx context.Context, pkgs []*shippingpackage.
 	for _, p := range pkgs {
 		switch p.State() {
 		case shippingpackage.StateLoaded:
+			loaded := p.Version() // MarkShipped raises no event, bumps nothing
 			if err := p.MarkShipped(at); err != nil {
 				return 0, 0, nil, err
 			}
-			if err := uc.Packages.Save(ctx, p, p.Version()-1); err != nil {
+			if err := uc.Packages.Save(ctx, p, loaded); err != nil {
 				return 0, 0, nil, err
 			}
 		case shippingpackage.StateShipped:
@@ -174,11 +175,12 @@ func (uc *OnDeparture) flagWithoutClose(ctx context.Context, load *outboundload.
 	flagged := 0
 	for _, p := range pkgs {
 		before := p.MissedFlagged()
+		loaded := p.Version() // a re-flag bumps nothing (the once-guard)
 		if err := p.FlagMissedLoad(load.Cutoff(), at); err != nil {
 			// LOADED or SHIPPED packages are exactly what did make it.
 			continue
 		}
-		if err := uc.Packages.Save(ctx, p, p.Version()-1); err != nil {
+		if err := uc.Packages.Save(ctx, p, loaded); err != nil {
 			return "", err
 		}
 		if !before {
