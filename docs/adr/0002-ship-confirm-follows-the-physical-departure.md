@@ -30,6 +30,19 @@ package not loaded, and the load is left for a supervisor (who may short-ship
 what is missing and close, or reopen). The same one-per-cutoff sweep rule
 applies: a re-run raises nothing new.
 
+Ordering note (recorded per PLAN wave 5): `TrailerDeparted` can arrive
+BEFORE `LoadClosed` — the two facts travel on different topics, so the
+consumption order is not guaranteed. The departure is handled, never
+dropped, and never confirms: the load it finds is LOADING, so the
+FlagDepartureWithoutClose path runs (packages flagged, load left for a
+supervisor) even though the physical close had already happened upstream.
+A load that closes only after its departure was consumed stays CLOSED
+unconfirmed — no later event confirms it. A re-delivery of the same
+departure occurrence changes nothing (the inbox dedupes on the CloudEvents
+id); only a genuinely new `TrailerDeparted` for the trailer would confirm
+the then-CLOSED load. The BDD scenario "A departure arriving before the
+load closes is handled, never confirmed" pins this end to end.
+
 The bill of lading is issued with the confirmation, using the seal number the
 departure event carried (`ErrSealMissing` without one).
 
