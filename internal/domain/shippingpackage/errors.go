@@ -32,6 +32,9 @@ var (
 	// missing.
 	ErrRequiredField = errors.New("shippingpackage: package id and site are required")
 
+	// ErrInvalidWeight is returned when a manifested weight is negative.
+	ErrInvalidWeight = errors.New("shippingpackage: weight must not be negative")
+
 	// ErrNoTimestamp is returned when a command's instant is missing.
 	ErrNoTimestamp = errors.New("shippingpackage: the command instant is required")
 

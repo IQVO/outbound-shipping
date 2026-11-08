@@ -7,6 +7,7 @@ import (
 )
 
 var pkgAt = time.Date(2026, 11, 6, 14, 20, 0, 0, time.UTC)
+var dock = pkgAt
 
 func wantErr(t *testing.T, err, target error) {
 	t.Helper()
@@ -139,4 +140,24 @@ func TestStageFromWrongStates(t *testing.T) {
 	relocated := stagedPackage(t)
 	wantErr(t, relocated.Stage(StageInput{Location: "STG-D05-B", IsStaging: true, LocationSite: "SITE-1", At: pkgAt}), ErrInvalidTransition)
 	wantErr(t, expectedPackage(t).Stage(StageInput{Location: "STG-D04-A", IsStaging: true, LocationSite: "SITE-1", At: time.Time{}}), ErrNoTimestamp)
+}
+
+func TestExpectCarriesWeight(t *testing.T) {
+	p, err := Expect(ExpectInput{PackageID: "pkg-1", Site: "S1", WeightG: 10300, At: dock})
+	if err != nil {
+		t.Fatalf("Expect: %v", err)
+	}
+	if p.WeightG() != 10300 {
+		t.Fatalf("WeightG = %v, want 10300", p.WeightG())
+	}
+	r, err := Rehydrate(RehydrateParams{ID: "pkg-1", Site: "S1", WeightG: 250, State: StateExpected, Version: 1})
+	if err != nil {
+		t.Fatalf("Rehydrate: %v", err)
+	}
+	if r.WeightG() != 250 {
+		t.Fatalf("rehydrated WeightG = %v, want 250", r.WeightG())
+	}
+	if _, err := Expect(ExpectInput{PackageID: "pkg-1", Site: "S1", WeightG: -1, At: dock}); !errors.Is(err, ErrInvalidWeight) {
+		t.Fatalf("negative weight err = %v, want ErrInvalidWeight", err)
+	}
 }
