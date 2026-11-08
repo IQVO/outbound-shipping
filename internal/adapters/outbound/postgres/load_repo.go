@@ -141,13 +141,13 @@ func (r *LoadRepo) OpenLoadKeys(ctx context.Context, site shared.SiteID) ([]outb
 
 // ListOpenByCpt implements ports.LoadRepo: cutoff ascending.
 func (r *LoadRepo) ListOpenByCpt(ctx context.Context, site shared.SiteID, cpt shared.CptID) ([]*outboundload.OutboundLoad, error) {
-	return r.listLoadsWhere(ctx, `site_id=$1 AND cpt_id=$2 AND state IN `+openLoadStates+`
+	return r.listLoadsWhere(ctx, `WHERE site_id=$1 AND cpt_id=$2 AND state IN `+openLoadStates+`
 		ORDER BY cutoff ASC`, site, cpt)
 }
 
 // ListOpenByDoor implements ports.LoadRepo: PLANNED first, then cutoff.
 func (r *LoadRepo) ListOpenByDoor(ctx context.Context, site shared.SiteID, door shared.DoorCode) ([]*outboundload.OutboundLoad, error) {
-	return r.listLoadsWhere(ctx, `site_id=$1 AND door_code=$2 AND state IN `+openLoadStates+`
+	return r.listLoadsWhere(ctx, `WHERE site_id=$1 AND door_code=$2 AND state IN `+openLoadStates+`
 		ORDER BY (state = 'PLANNED') DESC, cutoff ASC`, site, door)
 }
 
