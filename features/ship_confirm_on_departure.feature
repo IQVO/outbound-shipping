@@ -1,21 +1,23 @@
-# Derived from: PLAN.md wave 5 BDD list (the domain-level subset);
-# docs/adr/0002 (ship-confirm follows the departure),
-# docs/adr/0003 (correlation), docs/adr/0005 (event names).
-# These scenarios drive the DOMAIN packages directly with fixture events
-# (yard facts per the proposed yard model); the HTTP/Kafka surface arrives
-# with the wave-5 service and reuses the same steps.
+# Derived from: PLAN.md wave 5 BDD list (all six scenarios);
+# docs/adr/0002 (ship-confirm follows the departure, incl. the out-of-order
+# note), docs/adr/0003 (correlation), docs/adr/0005 (event names).
+# Wave 5: the scenarios drive the REAL service harness -- the same use cases
+# cmd/api wires (intake dedupe, policies, transactional outbox), over the
+# in-memory doubles, with the outbox recorder standing in for the relay.
+# Producer facts arrive as fixture events; yard facts follow the proposed
+# yard model (decision D5) until the yard contract merges.
 @bdd
 Feature: Ship-confirm on departure - the load leaves with what was loaded
   A CLOSED load confirms when TrailerDeparted arrives; a LOADING load never
   confirms — what is not loaded raises PackageMissedLoad once. A re-delivered
-  departure confirms nothing twice, and a diverted package still lets the
-  load close.
+  departure confirms nothing twice, a departure that arrived before the load
+  closed is handled without ever confirming, and a diverted package still
+  lets the load close.
 
   Background:
-    Given a planned load "load-7f3a" for the "16:00" cutoff of site "SITE-1"
-    And the door "D04" is assigned from appointment "appt-2211"
-    And trailer "trl-91" docks at door "D04"
-    And loading has started
+    Given site "SITE-1" runs the "16:00" cutoff shipped "STDOUT-2DAY"
+    And dock zone "DOCK-D" and staging lane "STG-D04-A" exist at site "SITE-1"
+    And appointment "appt-2211" is booked at door "D04" for the "16:00" cutoff
 
   Scenario: Manifest, stage, load, close, depart - confirmed with one BOL
     Given package "pkg-1029" of order "order-88421" is manifested on the load
@@ -37,6 +39,26 @@ Feature: Ship-confirm on departure - the load leaves with what was loaded
     When trailer "trl-91" departs with seal "SL-4471"
     Then the load is "LOADING"
     And exactly 1 "PackageMissedLoad" event was published for package "pkg-2055"
+    And exactly 0 "ShipmentConfirmed" events were published
+    And no bill of lading exists
+
+  Scenario: A departure arriving before the load closes is handled, never confirmed
+    Given package "pkg-1029" of order "order-88421" is manifested on the load
+    And package "pkg-1029" stages at "STG-D04-A"
+    And package "pkg-1029" loads through door "D04"
+    And package "pkg-2055" of order "order-88423" is manifested on the load
+    And package "pkg-2055" stages at "STG-D04-A"
+    When trailer "trl-91" departs with seal "SL-4471" early, before the load closes
+    Then the load is "LOADING"
+    And exactly 1 "PackageMissedLoad" event was published for package "pkg-2055"
+    And exactly 0 "ShipmentConfirmed" events were published
+    And no bill of lading exists
+    When the supervisor short-ships package "pkg-2055" with reason "LEFT-BEHIND" and closes the load
+    Then the load is "CLOSED"
+    And exactly 0 "ShipmentConfirmed" events were published
+    And no bill of lading exists
+    When the same departure is re-delivered
+    Then the load is "CLOSED"
     And exactly 0 "ShipmentConfirmed" events were published
     And no bill of lading exists
 
