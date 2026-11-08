@@ -63,14 +63,34 @@ func (uc *CloseLoad) Handle(ctx context.Context, loadID shared.LoadID, shortShip
 	return load, nil
 }
 
-// applyShortShips marks the commanded short-ships on their packages (a
-// package already SHORT_SHIPPED by the DropDiverted policy keeps its state)
-// and reports the close's inputs: the full short-ship record (commanded plus
-// already-diverted), the packages still outstanding and the loaded count.
+// applyShortShips FIRST marks the commanded short-ships on their packages
+// (a package already SHORT_SHIPPED by the DropDiverted policy keeps its
+// state), and only then collects the close's inputs -- a package the command
+// just short-shipped is not outstanding. It reports the full short-ship
+// record (commanded plus already-diverted, each package once), the packages
+// still outstanding and the loaded count.
 func (uc *CloseLoad) applyShortShips(ctx context.Context, pkgs []*shippingpackage.ShippingPackage, shortShips []shared.ShortShip) ([]shared.ShortShip, []shared.PackageID, int, error) {
 	byID := make(map[shared.PackageID]*shippingpackage.ShippingPackage, len(pkgs))
 	for _, p := range pkgs {
 		byID[p.ID()] = p
+	}
+	commanded := make(map[shared.PackageID]struct{}, len(shortShips))
+	for _, s := range shortShips {
+		p, ok := byID[s.PackageID]
+		if !ok {
+			return nil, nil, 0, repository.ErrPackageNotFound
+		}
+		commanded[s.PackageID] = struct{}{}
+		if p.State() == shippingpackage.StateShortShipped {
+			continue
+		}
+		loaded := p.Version() // MarkShortShipped raises no event, bumps nothing
+		if err := p.MarkShortShipped(s.Reason, uc.Clock.Now()); err != nil {
+			return nil, nil, 0, err
+		}
+		if err := uc.Pkgs.Save(ctx, p, loaded); err != nil {
+			return nil, nil, 0, err
+		}
 	}
 	short := make([]shared.ShortShip, 0, len(shortShips)+len(pkgs))
 	short = append(short, shortShips...)
@@ -81,26 +101,14 @@ func (uc *CloseLoad) applyShortShips(ctx context.Context, pkgs []*shippingpackag
 		case shippingpackage.StateLoaded, shippingpackage.StateShipped:
 			loaded++
 		case shippingpackage.StateShortShipped:
-			// Already short-shipped by the DropDiverted policy: record
-			// it on the load with the same reason.
-			short = append(short, shared.ShortShip{PackageID: p.ID(), Reason: "DIVERTED"})
+			// Record an already-short-shipped package the command did not
+			// name (the DropDiverted policy got there first) once, with
+			// its own reason.
+			if _, ok := commanded[p.ID()]; !ok {
+				short = append(short, shared.ShortShip{PackageID: p.ID(), Reason: "DIVERTED"})
+			}
 		default:
 			outstanding = append(outstanding, p.ID())
-		}
-	}
-	for _, s := range shortShips {
-		p, ok := byID[s.PackageID]
-		if !ok {
-			return nil, nil, 0, repository.ErrPackageNotFound
-		}
-		if p.State() == shippingpackage.StateShortShipped {
-			continue
-		}
-		if err := p.MarkShortShipped(s.Reason, uc.Clock.Now()); err != nil {
-			return nil, nil, 0, err
-		}
-		if err := uc.Pkgs.Save(ctx, p, p.Version()-1); err != nil {
-			return nil, nil, 0, err
 		}
 	}
 	return short, outstanding, loaded, nil
