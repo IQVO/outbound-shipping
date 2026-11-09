@@ -22,7 +22,8 @@ assert nothing.
    `./internal/domain/...,./internal/application/...`) — proves lines
    executed. Proves nothing about whether the test asserted the right
    thing.
-3. **Mutation testing** (`make mutation-fast`, gremlins) — proves the
+3. **Mutation testing** (`make mutation`, gremlins — CI's `mutation-fast`
+   job runs the same domain-package subset on every push/PR) — proves the
    tests actually ASSERT, not merely execute. A mutant is a deliberately
    broken version of the code (`<` -> `<=`, `+` -> `-`, etc.); if the test
    suite still passes against the mutant, it "survived" (LIVED) — meaning
@@ -101,13 +102,14 @@ containers (no Postgres, no Kafka; `make integration` needs only Docker) — a
 skip-gated test silently skips in CI and proves nothing there, while
 testcontainers actually exercises the assertions on the runner. A fitness
 test per technology enforces it (`TestKafkaIntegrationTestsUseTestcontainers`,
-`TestPostgresIntegrationTestsUseTestcontainers`). Share one container per
-package through a helper (e.g. an `outboxDB(t)` that runs
-`tcpostgres.Run` -> `ConnectionString` -> migrate -> pool -> `t.Cleanup`). See
-`internal/adapters/outbound/facilitycache/consumer_integration_test.go`
-for the working recipe (unique topic per test, one shared container per
-package, explicit `CreateTopics` + poll for the partition leader before
-the first read/write).
+`TestPostgresIntegrationTestsUseTestcontainers`). Share one container
+per package through a helper (e.g. an `outboxDB(t)` that runs
+`tcpostgres.Run` -> `ConnectionString` -> migrate -> pool -> `t.Cleanup`).
+See `internal/adapters/outbound/postgres/service_integration_test.go`
+for the working recipe (each test on its own fresh database via
+`internal/testing/pgtest/pgtest.go`;
+`internal/testing/kafkatest/kafkatest.go` is the one-broker-per-binary
+Kafka counterpart).
 
 ## Verify before opening the PR
 
@@ -115,6 +117,6 @@ the first read/write).
 make check-all   # check + coverage + arch-test + bdd (the full local gate)
 ```
 
-If `check-all` doesn't include `mutation-fast`/`vuln` locally, run them
+If `check-all` doesn't include `mutation`/`vuln` locally, run them
 explicitly too — CI runs them even when the local gate doesn't, so a PR
 can pass your local check and still go red in CI otherwise.

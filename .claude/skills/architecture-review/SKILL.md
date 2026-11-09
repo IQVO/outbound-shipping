@@ -27,7 +27,7 @@ check a design decision against this fleet's standing architecture.
 2. **Customer/Supplier direction, per `.claude/rules/domain-model.md`
    (or this repo's equivalent doc).** A new outbound call to a sibling
    context must go the direction ADRs already established — check
-   `docs/docs/adr/` for the relevant context-mapping ADR before assuming
+   `docs/adr/` for the relevant context-mapping ADR before assuming
    a new integration is fine. Flag any outbound call added to a context
    this repo doesn't already integrate with; that's a new architectural
    decision that needs its own ADR, not a code change slipped in
@@ -41,12 +41,13 @@ check a design decision against this fleet's standing architecture.
    documented zero-write constraint (e.g. warehouse-ops-agent v1), check
    no mutating HTTP method or MCP tool without `ReadOnlyHint: true` was
    added to an outbound/inbound surface bound by that constraint.
-4. **Analytics isolation (ADR-0006-style, where this repo has an
-   `internal/analytics/` read side).** The OLTP domain/application layers
-   must never import the analytics store or read model; the analytics
-   side must depend on nothing internal except itself. This is a real,
-   already-fitness-tested rule in most repos — confirm the test exists
-   and is green rather than re-deriving it by eye if possible.
+4. **Analytics isolation (this repo's analytics twin).** The analytics
+   side is a read side only: `warehouse.outbound-shipping.analytics` is
+   consumed by `internal/adapters/inbound/kafka/analytics_consumer.go`
+   and projected through `internal/application/usecases/project_board.go`
+   into the board store — the OLTP write path must never read that
+   projection back for business decisions. This repo has no dedicated
+   fitness test for that direction; check it by eye.
 5. **Kafka consumer-group pattern correctness.** A new Kafka consumer
    must use either (a) a named long-lived constant for a genuinely
    single-instance consumer, or (b) a per-process-unique generated group
@@ -78,6 +79,7 @@ finding with no citation is not actionable.
 
 This is advisory. It never blocks a merge on its own, and it never
 modifies files. If a finding conflicts with a decision explicitly stated
-in this repo's own AGENTS.md/CLAUDE.md, defer to that document and say
+in this repo's own README.md/SPEC.md or `.claude/rules/`, defer to that
+document and say
 so — this command reasons about the fleet's general conventions, not a
 higher authority than the repo's own explicit guidance.

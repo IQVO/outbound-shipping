@@ -12,10 +12,10 @@ this order — domain first, adapter last — never the reverse; writing the
 HTTP handler before the domain invariant it enforces produces handlers
 that validate nothing and use cases that get bypassed.
 
-This walks the exact path `POST /bins/{binId}/cycle-count` took
-(`internal/application/usecases/run_cycle_count.go` +
-`internal/adapters/inbound/http/server.go`'s `handleRunCycleCount`) as the
-concrete worked example — read those two files alongside this guide.
+This walks the exact path `POST /packages/{packageId}/stagings` took
+(`internal/application/usecases/scan_package.go`'s `StagePackage` +
+`internal/adapters/inbound/http/handlers.go`'s `handleStagePackage`) as
+the concrete worked example — read those two files alongside this guide.
 
 ## 1. Domain first: does an invariant already exist, or do you need one?
 
@@ -39,8 +39,8 @@ type <Verb><Noun>Result struct {
 }
 
 // <Verb><Noun> — one sentence: what business capability this represents,
-// and the domain rule it enforces (mirror RunCycleCount's doc comment,
-// which states the Unlocated-on-shortfall rule right in the doc comment).
+// and the domain rule it enforces (mirror StagePackage's doc comment,
+// which states the Staging-location rule right in the doc comment).
 type <Verb><Noun> struct {
     Repo   ports.<Aggregate>Repo   // driven ports only — never a concrete adapter
     Events ports.EventPublisher    // if this raises a domain event
@@ -75,46 +75,41 @@ In `internal/adapters/inbound/http/`:
    naming convention: `<verb><noun>Request`/`<verb><noun>Response`).
    DTOs live ONLY in the adapter layer — domain types never carry JSON
    tags.
-2. `server.go` — add the route (`r.Post("/path/{param}", s.handle<Name>)`
-   in the router setup) and the handler function:
+2. `server.go` for the route (`r.Post("/path/{param}", s.handle<Name>)`
+   in the router setup), `handlers.go` for the handler function:
    - decode + validate the request (`decodeJSON`), converting to domain
-     value objects immediately (`shared.NewBinId`, `shared.NewQuantity`,
+     value objects immediately (`shared.PackageID`, `shared.LoadID`,
      etc.) — a bad value fails here as an RFC 7807 validation error, never
      reaches the use case
-   - call the use case's `Execute`
+   - call the use case's `Handle`
    - map use-case errors to HTTP status via `writeError` (check
      `errors.go` for the existing error→status mapping before adding a new
      error type)
    - encode the domain result back to the response DTO and `writeJSON`
 3. Add the new use case field to the `Server`/`Deps` struct and wire it in
-   the composition root (`cmd/<service>/main.go`).
+   the composition root (`cmd/api/wire.go`).
 
 Write at least one httptest per endpoint: one success path, one error
 path (validation failure AND/OR the domain-rule failure, whichever this
 endpoint can produce).
 
-## 4. Contract: update OpenAPI, then regenerate docs
+## 4. Contract: update OpenAPI and keep it lint-clean
 
 Add the path to `apis/openapi.yaml` (request/response schemas, the RFC
 7807 problem-detail response for each error case — see the existing
-`/bins/{binId}/cycle-count` entry for the shape).
-
-Regenerate the Docusaurus REST reference — this repo's `docs-api-drift`
-CI job fails the PR if you skip this:
-
-```bash
-cd docs
-npm run clean-api-docs   # or the repo's own script name — check package.json
-npm run gen-api-docs
-```
+`/packages/{packageId}/stagings` entry for the shape). Keep the spec
+lint-clean: CI's `api-lint` job runs Spectral over `apis/openapi.yaml`
+(ruleset `.spectral.yaml`, fail-severity=warn) and fails the PR on
+warnings.
 
 ## 5. Behaviour: add a godog scenario
 
 If this endpoint is user-facing behaviour (not purely internal
-plumbing), add a `.feature` file under `features/` exercising it
-end-to-end against the real HTTP server — see `features/cycle_count.feature`
-for the exact shape this repo's `bdd` CI job expects (Given/When/Then over
-real HTTP, not mocked).
+plumbing), add a `.feature` file under `features/` exercising it — see
+`features/ship_confirm_on_departure.feature`
+for the exact shape this repo's `bdd` CI job expects (Given/When/Then
+over the same use cases `cmd/api` wires, on the in-memory doubles with
+the outbox recorder standing in for the relay).
 
 ## 6. Verify before opening the PR
 
