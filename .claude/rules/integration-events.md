@@ -98,11 +98,11 @@ Analytics-only rows (`LoadPlanned`, `LoadDoorAssigned`, `LoadCancelled`,
 | `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | `warehouse.facility.events` | zone -> site mapping |
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `warehouse.facility.events` | staging locations (role, zoneId) |
 | `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked` | `warehouse.dock-scheduling.events` | direction OUTBOUND only; cpt_id, carrier_scac nullable (re-pin from develop before wave 5) |
-| `com.warehouse.wms.yard-management.trailer.TrailerDocked` | `warehouse.yard-management.events` | fixture-validated against the proposed yard model until its contract merges |
-| `com.warehouse.wms.yard-management.trailer.DoorWorkCompleted` | `warehouse.yard-management.events` | same |
-| `com.warehouse.wms.yard-management.trailer.TrailerDeparted` | `warehouse.yard-management.events` | trailer_id, site_id, departed_at, load_state, seal_number; same |
+| `com.warehouse.wms.yard-management.trailer.TrailerDocked` | `warehouse.yard-management.events` | pinned: `contracts/yard-management.asyncapi.yaml` (gate + `producer_contract_test.go`) |
+| `com.warehouse.wms.yard-management.trailer.DoorWorkCompleted` | `warehouse.yard-management.events` | same pin |
+| `com.warehouse.wms.yard-management.trailer.TrailerDeparted` | `warehouse.yard-management.events` | trailer_id, site_id, departed_at, load_state, seal_number; same pin |
 
-Dock-scheduling and yard-management rows are pinned from the branch/proposed
-contracts (campaign spike Q5 and the yard model); re-pin both from the
-producers' `origin/develop` AsyncAPI before fleet wiring lands, per the
-orchestrator's sequencing note.
+The yard-management rows are pinned from the producer's `develop` AsyncAPI
+(`contracts/pinned.json`, `make harness-test` + the `pinned-contracts` CI job).
+The dock-scheduling row is still pinned from the producer's feature branch;
+re-pin it the same way (its AsyncAPI is a different shape).

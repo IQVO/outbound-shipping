@@ -55,7 +55,7 @@ departure event carried (`ErrSealMissing` without one).
   real carrier practice (PLAN section 8), and it is the most likely reason to
   revisit this decision.
 - Requires yard-management to be live; until its contract merges, departures
-  are consumed as fixture events validated against the proposed yard model.
+  are consumed per the yard-management contract pinned in `contracts/` (ADR 0006); they were first validated as fixtures against the proposed yard model.
 - A duplicate `TrailerDeparted` delivery must not confirm twice: the
   `SHIP_CONFIRMED` state itself is the guard (`ErrLoadConfirmed`), so the
   consumer's idempotency (dedupe on CloudEvents `id`) has a domain backstop.

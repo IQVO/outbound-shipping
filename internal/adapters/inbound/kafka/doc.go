@@ -4,8 +4,8 @@
 // CPTScheduleChanged), the layout consumer (facility-layout's ZoneRegistered
 // and LocationSlotRegistered), the dock consumer (dock-scheduling's
 // DockAppointmentBooked) and the yard consumer (yard-management's
-// TrailerDocked, DoorWorkCompleted and TrailerDeparted, fixture-validated
-// against the proposed yard model until its contract merges). The analytics
+// TrailerDocked, DoorWorkCompleted and TrailerDeparted, validated
+// against the producer's merged AsyncAPI pinned in contracts/). The analytics
 // consumer is this service's own projector over the analytics topic. Every
 // consumer decodes CloudEvents 1.0 only, via
 // internal/adapters/kafka/cloudevents, and dispatches on the FULL `type`

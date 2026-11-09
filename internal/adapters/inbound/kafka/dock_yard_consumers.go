@@ -88,16 +88,16 @@ func NewDockConsumerForTopic(brokers []string, topic, groupID string, uc DockUse
 // YardTopic is yard-management's integration topic.
 const YardTopic = "warehouse.yard-management.events"
 
-// The yard-management types this service acts on, FIXTURE-VALIDATED against
-// the proposed yard model (../yard-management-2026-11-05/model.yaml) until
-// the producer's contract merges; re-pin from origin/develop then.
+// The yard-management types this service acts on, validated against the
+// producer's merged AsyncAPI pinned in contracts/yard-management.asyncapi.yaml
+// (producer_contract_test.go).
 const (
 	TypeTrailerDocked     = "com.warehouse.wms.yard-management.trailer.TrailerDocked"
 	TypeDoorWorkCompleted = "com.warehouse.wms.yard-management.trailer.DoorWorkCompleted"
 	TypeTrailerDeparted   = "com.warehouse.wms.yard-management.trailer.TrailerDeparted"
 )
 
-// The payloads mirror the proposed yard contract's facts. The extra fields
+// The payloads mirror the yard contract's facts. The extra fields
 // (visit_id, dwell_minutes, load_state, asn_numbers, appointment_id...) are
 // ignored here. seal_number is optional: a departure without one confirms
 // nothing (the BOL must certify the yard's seal).

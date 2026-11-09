@@ -4,8 +4,8 @@
 // the in-memory doubles, with the outbox recorder standing in for the relay.
 // Producer facts arrive as fixture events: fulfillment, process-path,
 // facility-layout and dock-scheduling per their develop contracts, yard facts
-// (TrailerDocked, TrailerDeparted) per the proposed yard model (decision D5)
-// until the yard contract merges. Nothing drives the domain aggregates
+// (TrailerDocked, TrailerDeparted) per the yard contract pinned in contracts/
+// (proven by internal/adapters/inbound/kafka/producer_contract_test.go). Nothing drives the domain aggregates
 // directly: every step goes through a use case and every assertion reads the
 // repositories or the recorded outbox messages.
 package features_test

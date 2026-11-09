@@ -43,5 +43,5 @@ produced; network-fulfillment stays the only channel to the network.
 
 - The fleet gets one owner for "what left on which truck".
 - Another service to run; it depends on yard-management for docking and
-  departure facts (consumed as fixture events until the yard contract merges).
+  departure facts (consumed per the yard contract, pinned in ADR 0006).
 - `fulfillment-execution` stays focused on task execution.

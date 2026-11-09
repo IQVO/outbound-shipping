@@ -4,8 +4,8 @@
 # Wave 5: the scenarios drive the REAL service harness -- the same use cases
 # cmd/api wires (intake dedupe, policies, transactional outbox), over the
 # in-memory doubles, with the outbox recorder standing in for the relay.
-# Producer facts arrive as fixture events; yard facts follow the proposed
-# yard model (decision D5) until the yard contract merges.
+# Producer facts arrive as fixture events; the yard facts' shape is proven
+# against the producer's pinned contract (contracts/yard-management.asyncapi.yaml).
 @bdd
 Feature: Ship-confirm on departure - the load leaves with what was loaded
   A CLOSED load confirms when TrailerDeparted arrives; a LOADING load never
