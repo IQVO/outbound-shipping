@@ -1,34 +1,32 @@
+---
+id: before-first-release
+title: Before the first release
+sidebar_label: Before the first release
+description: "The packaging checklist for outbound-shipping's first merge to main, with the state of each item on develop."
+---
+
 # Before the first release: outbound-shipping
 
-The first merge to `main` runs `docker-publish` and `release`. Two services built from
-this template (pick-face-replenishment, task-interleaving) each needed a rework because
-packaging was missing or wrong when that moment came. Work through this list on a feature
-branch, **before** the first `develop` → `main` PR. Delete a row only when the service
-really does not have that part, and say so in the PR.
+The first merge to `main` runs `docker-publish` and `release` (`.github/workflows/ci.yml`). Two services built from the same template (pick-face-replenishment, task-interleaving) each needed a rework because packaging was missing or wrong when that moment came. This service is **built on `develop`, not deployed**: it has a Dockerfile but no Helm chart and no warehouse-infra registration, so most of the chart rows below are open. Work through the open rows on a feature branch, **before** the first `develop` to `main` PR. Delete a row only when the service really does not have that part, and say so in the PR.
 
-`new-service.sh` already generated `Dockerfile` and `.dockerignore` for you (verbatim from
-the fleet reference). The chart is NOT generated: it is shaped by what the service runs
-(consumer groups, MCP, analytics, frontend), so copy the closest sibling's
-`charts/<repo>/` and adapt it. References on `origin/develop`:
-`IQVO/pick-face-replenishment` (Kafka consumers, MCP, analytics, frontend) and
-`IQVO/task-interleaving`.
+`Dockerfile` and `.dockerignore` were generated from the fleet reference. The chart is not generated: it is shaped by what the service runs (six consumer groups, an MCP deployment, no frontend), so copy the closest sibling's `charts/<repo>/` and adapt it. References on `origin/develop`: `IQVO/pick-face-replenishment` and `IQVO/task-interleaving`.
 
-| # | Item | Done when | Guarded by |
-|---|------|-----------|------------|
-| 1 | **Real runtime only.** `cmd/api` wires Postgres and Kafka; the in-memory adapters (`internal/adapters/outbound/memory`) are test doubles. No `*_MODE`/permissive fallback, no default that boots "healthy" without `DATABASE_URL` or `KAFKA_BROKERS`. | `cmd/**` has no import of the memory package; the binary exits at boot on missing `DATABASE_URL`, `KAFKA_BROKERS` or a consumer group id. | `TestRuntimeBinaryHasNoInMemoryAdapters` (`internal/architecture/runtime_no_memory_fitness_test.go`). The boot-error behaviour has no generic sensor: cover it in `cmd/api` tests and in the chart test (row 8). |
-| 2 | **No Go file at the repo root.** The godog runner and steps live in `features/` (`package features_test`, `Paths: "."`), binaries in `cmd/<name>/`, everything else in `internal/`. | `ls *.go` at the root prints nothing; `make bdd` still finds `TestFeatures`. | `TestNoGoFilesAtRepoRoot` (`internal/architecture/no_go_files_at_root_fitness_test.go`). |
-| 3 | **`Dockerfile` builds every `cmd/*`.** Generated; confirm `ENTRYPOINT ["./api"]` matches your main binary and `EXPOSE` matches `HTTP_ADDR`. | `docker build .` succeeds locally; `docker run --rm <image> /app/api` starts (or exits with the intended config error). | `trivy-scan` job builds the image on every PR to `main`/`develop`; `docker-publish` on push to `main`. |
-| 4 | **`.dockerignore`** excludes docs, charts, harness, tests output. Generated. | Build context is small; `.git`, `.claude/`, `docs/`, `charts/` are not sent. | none: review once. |
-| 5 | **Helm chart `charts/outbound-shipping/`** with `Chart.yaml` `name: outbound-shipping`. The chart directory name, the `Chart.yaml` name and the `helm package` file name in the `release` job must all be `outbound-shipping`. | `helm lint charts/outbound-shipping` and `helm template` with the required values both pass. | `helm-lint` (PRs) and the `release` job (packages `outbound-shipping-<version>.tgz`). |
-| 6 | **`DATABASE_URL` comes from a Secret** (`secretKeyRef`, chart `secret.yaml` or `database.existingSecret`), never from the ConfigMap or a literal. | `helm template` shows `secretKeyRef` for `DATABASE_URL`; the ConfigMap has no DSN. | chart test (row 8). |
-| 7 | **Pod hardening and shutdown room.** `runAsNonRoot`, `readOnlyRootFilesystem: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`; `terminationGracePeriodSeconds` greater than the sum of the binary's shutdown bounds (drain delay + HTTP + consumers + relay). | Values and Deployment carry all of it; the chart refuses a grace period below the sum. | chart test (row 8). |
-| 8 | **Chart tests in `charts/outbound-shipping/tests/`** (`render_test.sh`, `test_service_selectors.py`): envFrom ConfigMap mounted, mandatory values refuse to render, every env var `cmd/api` reads is rendered, no `*_MODE`, Secret for the DSN, hardening, grace period, every Service selects exactly one Deployment. Copy and adapt the reference tests. | `bash charts/outbound-shipping/tests/render_test.sh` prints `PASS`. | `chart-tests` job runs every `tests/*.sh` and `test_*.py`. **It only warns when the directory is empty**, so an absent test passes CI: the checklist is the guard. |
-| 9 | **Consumer group ids are chart values**, stable and service-prefixed, never derived from the pod name. | Each `*_CONSUMER_GROUP` is rendered from `config.*` and refuses to render empty. | chart test (row 8); `kafka-testing-and-consumers.md` rule. |
-| 10 | **Optional CI jobs match the service.** `web` (needs `web/`), `docs-api-drift` (needs `docs/` and `apis/openapi.yaml`), `api-lint` (needs `apis/*.yaml` and the spectral rulesets): delete a job and its `docker-publish` `needs:` entry if the service has no such part, or add the part. | No job in `ci.yml` is permanently red or skipped for a missing directory. | first PR's CI run. |
-| 11 | **Registry access** images push to `ghcr.io/iqvo` with the Actions token (`packages: write` on `docker-publish`/`release`, already in `ci.yml`); no Docker Hub secrets are needed. | A dry-run of `docker-publish` on a throwaway branch, or ask the repo admin. | none. |
-| 12 | **`govulncheck` is clean** before the PR to `main` (CI `vuln` job installs `@latest`; `make vuln` runs the same command). | `make vuln` exits 0. | `vuln` job (a `docker-publish` prerequisite). |
+State checked against `origin/develop` on 2026-11-09.
 
-Tick this list in the PR that adds `Dockerfile`/chart wiring, and keep the file: it is the
-service's packaging record. Reference for the three failures this list prevents: a runtime that
-can run without Postgres/Kafka (row 1), Go files at the root (row 2), a release that fails on
-the first push to `main` because packaging was never built (rows 3-8).
+| # | Item | Done when | Guarded by | State on develop |
+|---|------|-----------|------------|------------------|
+| 1 | **Real runtime only.** `cmd/api` wires Postgres and Kafka; the in-memory adapters (`internal/adapters/outbound/memory`) are test doubles. No `*_MODE` fallback, no default that boots healthy without `DATABASE_URL` or `KAFKA_BROKERS`. | `cmd/**` does not import the memory package; the binary exits at boot on a missing `DATABASE_URL`, `KAFKA_BROKERS` or consumer group id. | `TestRuntimeBinaryHasNoInMemoryAdapters` (`internal/architecture/runtime_no_memory_fitness_test.go`). The boot-error text lives in `cmd/api/config.go`. | Done. |
+| 2 | **No Go file at the repo root.** The godog runner lives in `features/` (`package features_test`), binaries in `cmd/<name>/`, the rest in `internal/`. | `ls *.go` at the root prints nothing; `make bdd` still finds `TestFeatures`. | `TestNoGoFilesAtRepoRoot` (`no_go_files_at_root_fitness_test.go`). | Done. |
+| 3 | **`Dockerfile` builds every `cmd/*`.** | `docker build .` succeeds; `ENTRYPOINT ["./api"]` is the main binary; `EXPOSE 8080` matches the default `ADDR` (`:8080`). The MCP binary listens on `MCP_ADDR` (`:8090`) and has no `EXPOSE`. | The `docker-publish` job builds and pushes the image on a push to `main`. There is no PR-time image build job in `ci.yml` (no `trivy-scan`). | Dockerfile present and loops over `cmd/*` (builds `/app/api` and `/app/mcp`). Not built by CI before the first push to `main`. |
+| 4 | **`.dockerignore`** excludes docs, charts, harness and test output. | Build context is small; `.git`, `.claude/`, `docs/`, `charts/` are not sent. | none: review once. | Present. |
+| 5 | **Helm chart `charts/outbound-shipping/`** with `Chart.yaml` `name: outbound-shipping`. The directory name, the chart name and the `helm package` file name in the `release` job must all be `outbound-shipping`. | `helm lint charts/outbound-shipping` and `helm template` with the required values both pass. | The `release` job packages `outbound-shipping-<version>.tgz`. There is no `helm-lint` job in this repository's `ci.yml`. | **Open: `charts/` does not exist.** |
+| 6 | **`DATABASE_URL` comes from a Secret** (`secretKeyRef`), never from the ConfigMap or a literal. Do the same for `MIGRATIONS_DATABASE_URL` if a direct DSN is used. | `helm template` shows `secretKeyRef` for `DATABASE_URL`; the ConfigMap has no DSN. | chart test (row 8). | Open (no chart). |
+| 7 | **Pod hardening and shutdown room.** `runAsNonRoot`, `readOnlyRootFilesystem: true` (the service writes nothing to disk), `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`; `terminationGracePeriodSeconds` above the binary's shutdown bounds (the consumers' drain plus 10 s of HTTP drain, see the [runbook](/docs/operations/runbook)). | Values and Deployment carry all of it. | chart test (row 8). | Open (no chart). |
+| 8 | **Chart tests in `charts/outbound-shipping/tests/`** (`render_test.sh`, `test_service_selectors.py`): env ConfigMap mounted with `envFrom`, mandatory values refuse to render, every env var `cmd/api` reads is rendered (see [Configuration](/docs/operations/configuration)), no `*_MODE`, Secret for the DSN, hardening, grace period, every Service selects exactly one Deployment. | `bash charts/outbound-shipping/tests/render_test.sh` prints `PASS`. | The `chart-tests` job runs every `tests/*.sh` and `test_*.py`. **It only warns when the directory is empty**, so an absent test passes CI: this checklist is the guard. | Open (no chart, so the job warns and passes). |
+| 9 | **Consumer group ids are chart values**: the six `*_CONSUMER_GROUP` variables, stable and service-prefixed, never derived from the pod name. | Each is rendered from `config.*` and refuses to render empty. | chart test (row 8). | Open (no chart). |
+| 10 | **Optional CI jobs match the service.** `ci.yml` has `api-lint` (spectral over both specs) and `chart-tests`; it has no `web` and no `docs-api-drift` job. | No job is permanently red or skipped for a missing directory. | first PR's CI run. | `api-lint` runs. The site's own build is a separate workflow, `docs.yml`. |
+| 11 | **Registry access.** Images push to `ghcr.io/iqvo` with the Actions token (`packages: write` on `docker-publish` and `release`, already in `ci.yml`). | A dry run of `docker-publish` on a throwaway branch, or ask the repo admin. | none. | Configured in `ci.yml`; never exercised (no push to `main` yet). |
+| 12 | **`govulncheck` is clean** before the PR to `main` (`vuln` installs `@latest`; `make vuln` runs the same). | `make vuln` exits 0. | `vuln` job (a `docker-publish` prerequisite). | Runs in CI on every push and PR. |
+| 13 | **Platform registration.** The service is listed in warehouse-infra `terraform/apps.yaml` (route, database, Argo application) and in the Kong edge under `/api/outbound-shipping`. | The app appears in warehouse-infra on `origin/develop`. | warehouse-infra's own generators and tests. | **Open: no entry.** Not part of the original template checklist; added because it is what separates "built" from "deployed". |
+
+Tick this list in the PR that adds the chart, and keep the file: it is the service's packaging record. It prevents three failures seen before: a runtime that can run without Postgres or Kafka (row 1), Go files at the root (row 2), and a release that fails on the first push to `main` because packaging was never built (rows 3 to 9).
