@@ -1,0 +1,80 @@
+---
+id: outbound-shipping-api
+title: "Outbound Shipping API"
+description: "Commands and queries of the **outbound-shipping** bounded context (WMS"
+sidebar_label: Introduction
+sidebar_position: 0
+hide_title: true
+custom_edit_url: null
+---
+
+import ApiLogo from "@theme/ApiLogo";
+import Heading from "@theme/Heading";
+import SchemaTabs from "@theme/SchemaTabs";
+import TabItem from "@theme/TabItem";
+import Export from "@theme/ApiExplorer/Export";
+
+<span
+  className={"theme-doc-version-badge badge badge--secondary"}
+  children={"Version: 1.0.0"}
+>
+</span>
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Outbound Shipping API"}
+>
+</Heading>
+
+
+
+Commands and queries of the **outbound-shipping** bounded context (WMS
+subdomain, ADR 0001): staging manifested packages at the door, planning
+and loading the outbound load for one cutoff, closing and ship-confirming
+it on the trailer's physical departure (ADR 0002), and issuing the bill
+of lading.
+
+**Routes.** Every route below is the domain model's `rest` list verbatim:
+dock operators drive package scans (`stagings`, `loadings`,
+`unloadings`), dock supervisors decide loads (`closures`, `reopenings`,
+`cancellations`, BOL `voids`), and a scheduler sweeps missed loads. The
+service is written through a transactional outbox: a REST command
+persists the aggregate AND its already-encoded CloudEvents in one
+transaction; a relay drains them to Kafka
+(`warehouse.outbound-shipping.events`, ADR 0005).
+
+**Idempotency.** Every POST takes an `Idempotency-Key` (fleet REST
+guideline R3): the first request executes, a replay returns the original
+response with `Idempotency-Replayed: true`, and a key reused with a
+DIFFERENT body is a `409 idempotency-key-reused` (R4).
+
+**Errors** are RFC 9457 problem+json with a fleet `code`. The domain
+refusals map 1:1 to the model's invariant errors, e.g.
+`409 packages-outstanding` (`ErrPackagesOutstanding`),
+`409 load-not-closed` (`ErrLoadNotClosed`),
+`422 not-staging-location` (`ErrNotStagingLocation`).
+
+
+<div
+  style={{"display":"flex","flexDirection":"column","marginBottom":"var(--ifm-paragraph-margin-bottom)"}}
+>
+  <h3
+    style={{"marginBottom":"0.25rem"}}
+  >
+    Contact
+  </h3><span>
+    outbound-shipping maintainers: [outbound-shipping@iqvo.example.com](mailto:outbound-shipping@iqvo.example.com)
+  </span><span>
+    URL: [https://github.com/IQVO/outbound-shipping](https://github.com/IQVO/outbound-shipping)
+  </span>
+</div><div
+  style={{"marginBottom":"var(--ifm-paragraph-margin-bottom)"}}
+>
+  <h3
+    style={{"marginBottom":"0.25rem"}}
+  >
+    License
+  </h3>
+</div>
+      

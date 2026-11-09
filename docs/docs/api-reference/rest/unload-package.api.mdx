@@ -1,0 +1,75 @@
+---
+id: unload-package
+title: "Unload a package back to staging (create an unloading)"
+description: "Moves a `LOADED` package back to `STAGED` and publishes"
+sidebar_label: "Unload a package back to staging (create an unloading)"
+hide_title: true
+hide_table_of_contents: true
+api: eJztWW1z27gR/is7+HKSS8oveblG+VKfrbSeJLYrO73ORJ4QIpYUziDAAKAcjUcz/RH9hf0lnQVISbaU5HLtzHU68ReLILDYffZ9ec9MjZZ7afSZYEPWaGW4uOT5LS+RJUygy62s6T0bsrdmjg44ZG8ujk9HpxnUcSNMeX4L3kB2dX38Z3rBtYC6mSrpZugmOmspvgvkUWRwJ/0M/Awh3m/sDw4scmf0AOIuqUuQDoxWi4mujXNyqhCmWBiL4SRtoh1uJus0N7qQtkIxBKPzuKHjThIHV385u7wk1qQHi0Xj0EUmsqcHL4Ari1wsUqJVo8gmupeNrD2Oy1ftah/+9Y9/BtLeNvktzLgDhYUfTDRLmOelY8P3rJXVsZuE1dzyCj1aenPPNK+QDdmZwKo2HnW+SF/jgiVMErwz5AItS5jFj420KNjQ2wYfa+GEK4U2raT2KOAWF9ArFKKHspECldQI4yfp+Fl/AK+kdR4ah4CfMG88upfAJ9pirfgCLPrGahcEct5YFGDR1UY7bKHZZHQcDhHAxFT2cqJ5uNxi41DEAxyELAq0qD1MjViQegK+coPQLS7SeCiLwLl8hhVnw3vmFzXh47yVumQJq6R+g7r0MzY8fJ6win9aPR79MWH4iVe1woC687zEtL4t08ODoxfp0cHR88PDg+epxY/pwSG7WS6TFf6tYZyJDvma+9lXcb+eIVRcywIdAb+yLgG9olGFVKpC7dOItDT6B7expz/41YI+lKuTiKzJS6/o2OWK/+XyJrKNzv9kxIJoP5YiN9qj9vSK17WSeXD3/V8cSXW/zZSZ/oK5ZwmrLTmnl8QIkeXticfMP4Tp59nigfflvGoDhCmKteP2uvAgwGh4FB8CWpsoCF7xEkWac+uNDtpcofFuM2aNIxZsuaQtnTkHAY4ODujftlLXcQJi/AJecqmJh+iS4fguX9hBzzYIdzPU4GfSbfgTp4d4CgprKuCdz618w8PKdqBH/rvLZKbGKOTkNqibig3fk5JvgrS/WdFri3nPJDmFkx4/xF+ee0oEc7SOJLx5bBZS/FfteX33N1G9OrsepYebNK+k7wiaxub4wViB9jOEH+ow7EwrrnmJ5NJwQQtnrd5aZt+uI0Hv+HQMBwcHT/ovwVTS01prAgi1NaLJ0YKQArTxcKvNHUg/INbujL390GjpP1gsvs7YowgUJbJYJJ0pzdFOuZdVyL8a52ih5tahCLeRm3wzsnQo/bF4wjfBfWO4aMH1vJS6/KBMtLZt4svOiHZc25owG/39cnRyPTplCYseyBIWawxaiZk7/LoYX3/onrcN6Crcs1xb6/pKSpZlSK6FsRX3cen50yi7rIiPw82oEnK+1GVXC8WA8nRXDHnLFRFFEXOescChks5JXe5LPedKUmKNLgaFRCWgl025SNvAnQVP/4z31tZMFVZ/+DYvDu86YaICGhcuEbjtw5HSDsW1YHxGpY3bAfCyveSrxnzlORV0sXRBa40FOgg9HJQDyNqg7FLTeOe5pnow28oLu3axmyXd5blUO1jfUPFlhHal2qfbqj034Jp8tkoRvY6vVBufFqbR4rv2/je092Jbe63vxnqfqyFkj+t86MWOB3jh0T5oJfrJRGd31ugypR1ZspIqNTrl2vgZ2q1XIdRlCRg70dkXq97vFvP7WsyzXaH8ncZPNeaUXQsuVWPJ5UlUq7lKA9ff/f33194yYRX6maGRRW1caFaohRuy/e6O/ftVl7fcb7qJAqHq0M67hryxihpv72s33N83jZ9SSI/hQepycMctzkzjMHUL57Fyg84YthA602muGkdhpPfa6BKsaTzCPq/lNuE+o8aNrGS8bt5GEarNZutx47OkhrUwAakWl4uWNnQVCxxfnm1U7EN2ODgYHLQ2y/Ngs20jvMUXVFxqz6UmgJJH8JTSz5rpIDfV/tlf/3axLRWpuwqK3Kb8J/lxbgatNRCNUJHKHLXDDY7enb85OxmdX41O2XJr8GGqimvhQnX7sUEr0YGJPeXe3taNe3sQFlBA8NZPHno/v72aaNdMhSFBE2gr98P+ENpKdkeL74D7cIkwxiZQK6611OVEEx/dqCrMsjpVhJRSGAtGI+SNN0WRQK4MlYSB+81EE0hJT21wHC1xqZDmYfVs4WTOFQisufUhGLUMH/WTQEc613S3T6VSE20KUIGjwURP9N7emKzQDfb2YDRHu2itcoqKuhDXikVgQGUEqh8cZJZqUlDS+VVDMZxoYaiFb6d1DoSV83Xr7HKuHfSyFkRHKbFzuYwS6doDs34CgZZrarRz6QI1zKWIkwEiQ1A1FgMZi6ZGvSKUc52jUiHc0vufLt5ANjdSBMKECQeKuqJRlNDvEGsXqnGManEDuJ7hRFMUkHlo+u8s9WyEvjVNSVMsb7l2PKc7uIpq/TQEDuPR1TXk0QwnuiYPcz6CyMvSYsk9wvH5KUjvVjNF1BQpBZwo04jRHLV3IDWZxkRvXPQSOFikuZywXMaxXEVD1de8uOU0kFwFo8F2oMJAN1tZ9LN+q/+NscXaCC4vrq7B81sybf1wzPcaF1k3UCRxJ3pzrNgfBmGLMFds25fVbDEJEmyNFo2VpdRc0dzx104XO01uDRgn+vTs1avReHR+vZow8i/OGKE3ftqBMaLE5fb2gFuE8asTePH02Y+wmbS7OWYEICPNZcFiWi8hIUIx6aDiNRwOD0lFJGbnPtTxWcl1myZdApQiJzrwuDNPQpg1d2Pji80MmrTnQhdOLQd5RhCKjlAbfm78SVyLm4+OaMqQto6Ydn15e+Lc+Kv45k33grChWEt5tOJ6Mxa3pfHWmL8Llb3cIlk817Dy7/7jxHi/rpW+f0D48geEWPtQptqvFZdBLSEF37flzbqEYgkbbo6xNyqcm4TNqCYavmf391Pu8J1VyyUtU85csOH7m4QFG51SAfH+ngnp6Ldgw4Ir93jwvanA3rgtW/vwn4/Dd8rbLnJNn0XmXDX0xBJ2i4sHk/sl1Y3tF5PfLMP/3aeUnZBG6LY/Oq3QpU8jcdNJRCm9jh1Jt2NrnLw+cZznWPsv7r3ZqNYp87CETdtvFVVoPpjld9QS8buoaxO0Fr860No9U1yXDY3hhizSpL9/A7fdCVU=
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/outbound-shipping-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Unload a package back to staging (create an unloading)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/packages/{packageId}/unloadings"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Moves a `LOADED` package back to `STAGED` and publishes
+`PackageUnloaded` with the operator's reason. Unloading is only
+possible before the load is ship-confirmed: once the package is
+`SHIPPED` it refuses with `409 already-shipped`
+(`ErrAlreadyShipped`) — the truck has left.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./unload-package.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./unload-package.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./unload-package.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

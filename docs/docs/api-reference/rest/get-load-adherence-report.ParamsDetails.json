@@ -1,0 +1,1 @@
+{"parameters":[{"name":"site_id","in":"query","description":"Filter by facility-layout site code.","schema":{"type":"string","minLength":1,"examples":["SITE-1"],"title":"SiteId"}},{"name":"operating_date","in":"query","description":"Filter by operating date (YYYY-MM-DD, UTC).","schema":{"type":"string","format":"date","examples":["2026-11-06"]}}]}

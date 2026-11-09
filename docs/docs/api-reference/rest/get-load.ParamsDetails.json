@@ -1,0 +1,1 @@
+{"parameters":[{"name":"loadId","in":"path","required":true,"description":"The outbound load id.","schema":{"type":"string","minLength":1,"examples":["load-7f3a"],"title":"LoadId"}}]}

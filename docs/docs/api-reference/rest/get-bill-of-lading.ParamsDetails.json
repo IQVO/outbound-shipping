@@ -1,0 +1,1 @@
+{"parameters":[{"name":"bolNumber","in":"path","required":true,"description":"The bill of lading number.","schema":{"type":"string","minLength":1,"examples":["BOL-2026-11-06-0042"],"title":"BolNumber"}}]}
