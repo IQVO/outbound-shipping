@@ -49,6 +49,22 @@ jobs:
       - run: python3 scripts/harness/test_hook.py
 
 
+  # Producer contract pins (contracts/pinned.json): fails when a pinned copy differs from the
+  # producer's develop. Not a required check: a producer merge must not block unrelated PRs here,
+  # but the red is the signal to re-pin and re-run producer_contract_test.go.
+  pinned-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: python3 scripts/harness/test_pinned_contract_gate.py
+      - name: Pins equal their producers' develop
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 scripts/harness/pinned_contract_gate.py
+
   # Complexity gate as its own named check: cyclomatic (gocyclo, cyclop),
   # cognitive (gocognit), nesting (nestif) and function size (funlen).
   # Thresholds live in .golangci.yml; --enable-only runs just these five

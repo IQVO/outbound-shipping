@@ -80,7 +80,7 @@ Payload rules:
 | `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | `warehouse.facility.events` | zone to site mapping |
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `warehouse.facility.events` | staging locations (role, zoneId) |
 | `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked` | `warehouse.dock-scheduling.events` | `direction=OUTBOUND` only; `cpt_id`, `carrier_scac` nullable — pinned from the producer's `origin/feature/service` until it merges (spike Q5) |
-| `com.warehouse.wms.yard-management.trailer.TrailerDocked` | `warehouse.yard-management.events` | fixture-validated against the proposed yard model until its contract merges |
+| `com.warehouse.wms.yard-management.trailer.TrailerDocked` | `warehouse.yard-management.events` | pinned from the producer's merged contract (ADR 0006) |
 | `com.warehouse.wms.yard-management.trailer.DoorWorkCompleted` | `warehouse.yard-management.events` | same |
 | `com.warehouse.wms.yard-management.trailer.TrailerDeparted` | `warehouse.yard-management.events` | `trailer_id, site_id, departed_at, load_state, seal_number`; same |
 

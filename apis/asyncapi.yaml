@@ -37,8 +37,8 @@ info:
     from facility-layout; `DockAppointmentBooked` from dock-scheduling
     (pinned from its `origin/feature/service` until that contract merges);
     `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` from
-    yard-management (fixture-validated against the proposed yard model until
-    its contract merges). Each feeds a durable local copy. The consumed
+    yard-management (pinned to its merged contract,
+    `contracts/yard-management.asyncapi.yaml`, ADR 0010 there). Each feeds a durable local copy. The consumed
     messages below are the producers' own contracts, decoded independently
     here and never imported.
 
@@ -240,10 +240,11 @@ channels:
       yard-management's integration topic. This service consumes ONLY
       `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted`
       (StartOnDock, ConfirmOnDeparture and FlagDepartureWithoutClose
-      policies, ADR 0002). The yard contract is NOT merged yet: these
-      messages are validated as FIXTURE events against the proposed yard
-      model (`../yard-management-2026-11-05/model.yaml`) until the producer
-      publishes its own AsyncAPI; re-pin from `origin/develop` then.
+      policies, ADR 0002). The three messages are validated against the
+      producer's merged AsyncAPI, pinned in `contracts/yard-management.asyncapi.yaml`
+      (kept equal to its `develop` by `scripts/harness/pinned_contract_gate.py`);
+      `TestConsumedYardTypesMatchTheProducersIntegrationContract` fails when a
+      consumed type is not on the producer's integration channel.
     publish:
       operationId: consumeYardTrailerEvents
       summary: Consume trailer dock, door-work and departure facts.
@@ -936,12 +937,11 @@ components:
 
     TrailerDocked:
       name: TrailerDocked
-      title: TrailerDocked (consumed, fixture-validated)
+      title: TrailerDocked (consumed, pinned)
       summary: yard-management docked a trailer at the load's door; the trailer attaches to the load.
       description: |
-        Fixture-validated against the PROPOSED yard model until
-        yard-management publishes its contract; re-pin from the producer's
-        `origin/develop` AsyncAPI before fleet wiring lands. StartOnDock
+        Pinned from yard-management's merged AsyncAPI
+        (`contracts/`). StartOnDock
         policy: a docking at the load's assigned door attaches the trailer,
         after which loading may start.
       contentType: application/cloudevents+json
@@ -973,10 +973,10 @@ components:
 
     DoorWorkCompleted:
       name: DoorWorkCompleted
-      title: DoorWorkCompleted (consumed, fixture-validated)
+      title: DoorWorkCompleted (consumed, pinned)
       summary: yard-management completed the door work; recorded, no state change in v1.
       description: |
-        Fixture-validated against the proposed yard model. Consumed for the
+        Pinned from yard-management's merged AsyncAPI. Consumed for the
         load-adherence read model (door work finish vs cutoff). A CLOSED
         load's door work completes on `LoadClosed` (wave 6.4, deferred).
       contentType: application/cloudevents+json
@@ -1007,10 +1007,10 @@ components:
 
     TrailerDeparted:
       name: TrailerDeparted
-      title: TrailerDeparted (consumed, fixture-validated)
+      title: TrailerDeparted (consumed, pinned)
       summary: The trailer physically left; the seal number and departure trigger ship-confirm (ADR 0002).
       description: |
-        Fixture-validated against the proposed yard model. ConfirmOnDeparture
+        Pinned from yard-management's merged AsyncAPI. ConfirmOnDeparture
         policy: a departure for a CLOSED load confirms the shipment (seal
         from this event) and issues the BOL. FlagDepartureWithoutClose: a
         departure for a LOADING load NEVER confirms — every package not

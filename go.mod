@@ -16,6 +16,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.44.0
 	go.opentelemetry.io/otel v1.47.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -95,5 +96,4 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.51.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
