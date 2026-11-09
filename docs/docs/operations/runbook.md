@@ -124,5 +124,5 @@ A consumer loop that dies on its own (a reader error) is logged as `kafka consum
 | Void a bill of lading | `POST /bills-of-lading/{bolNumber}/voids` with `{"reason":"..."}`. The shipment is not undone. |
 | Reopen a closed load before departure | `POST /loads/{loadId}/reopenings` (only a `CLOSED` load). |
 | Resolve a load that left without closing | The departure never confirms a `LOADING` load (ADR 0002). Short-ship the packages that missed with a reason and close it; it stays `CLOSED` and unconfirmed: the departure that already arrived is not replayed, and only a `TrailerDeparted` with a new CloudEvents id and a seal number would confirm it. A supervisor decides next steps outside the service. |
-| Re-run a consumer from scratch | Give it a new group id (replays the topic; the inbox makes it safe). |
+| Re-run a consumer from scratch | Give it a new group id (replays the topic). The inbox dedupes on `(consumer, event_id)`, and an event handled as `ignored` is also claimed, so a replay does not re-apply it: delete its `processed_events` row first if it must be re-evaluated. |
 | Check consumer progress | Kafka consumer-group lag for the six groups; `processed_events` rows per `consumer` (`outbound-shipping-fulfillment`, `-dock`, `-yard`, `-cpt`, `-layout`, `-projector`). |
