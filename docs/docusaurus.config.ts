@@ -6,7 +6,7 @@ import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
 const config: Config = {
   title: 'Outbound Shipping',
   tagline:
-    'Outbound Shipping: a Supporting bounded context of the WMS domain (warehouse-systems).',
+    'Stage, load and ship-confirm outbound packages on the trailer\'s physical departure.',
   favicon: 'img/favicon.svg',
 
   future: {

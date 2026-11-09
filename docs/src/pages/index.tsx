@@ -35,7 +35,7 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
-        <p className={styles.heroLead}>TODO-LEAD</p>
+        <p className={styles.heroLead}>Outbound Shipping gets every manifested package onto the right load before its cutoff, proves what left on which trailer, and tells the fleet that an order has actually shipped. A load is planned from the first manifest, started by the trailer docking, and confirmed only by the yard&apos;s physical departure, which also issues the bill of lading. It is built on develop and not deployed yet.</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview/introduction">
             Read the docs
