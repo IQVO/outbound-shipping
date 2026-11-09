@@ -16,15 +16,17 @@ shared-broker reality has already caused a real incident once.
 
 ### 1. Is it actually cross-service?
 
-Not every domain event this service raises belongs on the wire. Check
-`internal/adapters/outbound/kafka/publisher.go`'s doc comment — this repo
-forwards only `StockReserved`/`ReservationRevoked`; everything else is a
-local concern published only to the Postgres outbox
-(`internal/adapters/outbound/postgres/event_publisher.go`) for audit, not
-broadcast. Before adding a new event to the Kafka publisher, confirm a
-sibling context genuinely needs to react to it — check
-`docs/docs/ddd/context-map.md` or the equivalent ubiquitous-language doc
-for who's actually downstream.
+Not every domain event belongs on the wire, and the catalogue is pinned:
+`internal/adapters/outbound/events/`'s package doc maps the facts the
+application raises to CloudEvents outbox messages (every fact lands in
+the transactional outbox via
+`internal/adapters/outbound/postgres/outbox_repository.go`), and
+`.claude/rules/integration-events.md`'s "Published types" table is the
+authoritative catalogue of which types reach sibling contexts — its
+header names who is actually downstream (order-management,
+network-fulfillment, exception-management, yard-management). Before
+adding a new type to the catalogue, confirm a sibling context genuinely
+needs to react to it; that rule file is this repo's context map.
 
 ### 2. Envelope: CloudEvents 1.0, structured mode — MANDATORY
 
@@ -52,10 +54,11 @@ shape, no dual-write, no `EVENT_ENVELOPE_MODE` toggle (see
 `type` follows the platform-wide reverse-DNS convention
 `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`, all
 lowercase except the final PascalCase event name — e.g.
-`com.warehouse.wms.inventory-storage.reservation.ReservationRevoked`. Take
+`com.warehouse.wms.outbound-shipping.outboundload.LoadPlanned`. Take
 the subdomain/context segment from the subdomain table on warehouse-docs'
-Event Standard page (`docs/strategic-design/event-standard-cloudevents.md`);
-don't guess it. The same `type` is used on the analytics topic; only
+Event Standard page (that table lives in the warehouse-docs repo); don't
+guess it — this service's segment is `com.warehouse.wms.outbound-shipping`.
+The same `type` is used on the analytics topic; only
 `dataschema` changes (`…:analytics:<EventName>:v1`).
 
 ### 3. Implementation
@@ -70,24 +73,26 @@ the adapter layer). In the Kafka publisher adapter:
   ```go
   value, err := cloudevents.New(cloudevents.Spec{
       ID:        evt.ID(),            // minted once; the outbox row stores it
-      Entity:    "reservation",
-      EventName: "ReservationRevoked",
-      Subject:   evt.ReservationID(),
+      Entity:    "outboundload",
+      EventName: "LoadPlanned",
+      Subject:   evt.LoadID(),
       Time:      evt.OccurredAt(),
       Stream:    cloudevents.StreamEvents,
       Version:   1,
       Data:      payload,              // unchanged wire payload
   })
   msg := kafkago.Message{
-      Key:     []byte(evt.ReservationID()),
+      Key:     []byte(evt.LoadID()),
       Value:   value,
       Headers: append(traceHeaders, cloudevents.ContentTypeHeader()),
   }
   ```
 - Give the message a partition key that keeps ordering where it matters
   (the aggregate id) and keep the `kafkago.Hash{}` balancer
-- Use `Topic` — this service's own topic constant
-  (`warehouse.<context>.events`), never a sibling's
+- Target this service's own topic constants (`TopicEvents`, and the
+  analytics twin where the catalogue says so) in
+  `internal/adapters/outbound/events/` — never a sibling's topic; the
+  outbox relay publishes each row to the topic the row itself names
 
 ### 4. Contract + docs
 
@@ -96,19 +101,17 @@ the adapter layer). In the Kafka publisher adapter:
   CloudEvents envelope schema with every attribute required), with its
   exact `type` const and `dataschema`, matching the entity-grouping
   convention already there (group by aggregate, not chronologically)
-- Regenerate the AsyncAPI HTML reference:
-  ```bash
-  cd docs && npm run gen-async-docs:all   # or gen-async-docs, check package.json
-  ```
-  This repo's `docs-api-drift` CI job fails the PR if the generated
-  `static/asyncapi/<ctx>/` output doesn't match a fresh regen — a nullable
+- Keep the spec lint-clean: CI's `api-lint` job runs Spectral over
+  `apis/asyncapi.yaml` (ruleset `.spectral.asyncapi.yaml`,
+  fail-severity=warn) and fails the PR on warnings — a nullable
   field change here has bitten before.
 
 ### 5. Test
 
 Add a golden exact-JSON unit test for the new `type` asserting every
 CloudEvents attribute, the `type` string and the `content-type` header,
-against a fake `Writer` (see `publisher_test.go` — never a real broker in
+against a fake `Writer` (see `internal/adapters/kafka/cloudevents/cloudevents_test.go`
+for the golden and content-type-header tests — never a real broker in
 a unit test). If this event
 now needs a `_integration_test.go` asserting real delivery, it MUST use
 testcontainers (see the fitness test `TestKafkaIntegrationTestsUseTestcontainers`
@@ -120,10 +123,11 @@ hardcoded `localhost:9092` fails CI).
 ### 1. Never import the sibling's Go packages
 
 This service knows a sibling's topic name, its exact CloudEvents `type`
-strings and payload shape ONLY — never its Go types. See `internal/adapters/outbound/facilitycache/consumer.go`'s
-own doc comment: "This service has no business knowing anything else
-about that context beyond this topic name and the envelope/payload shapes
-below." Hand-mirror the payload struct locally; do not add a Go module
+strings and payload shape ONLY — never its Go types. See
+`internal/adapters/inbound/kafka/fulfillment_consumer.go`'s
+own doc comment: the payloads "mirror fulfillment-execution's events
+(restated here, never imported)". Hand-mirror the payload struct locally;
+do not add a Go module
 dependency on the sibling repo (an architecture fitness test in most
 repos in this fleet would catch that anyway for the stricter contexts —
 check this repo's own `internal/architecture/` for a
@@ -162,32 +166,34 @@ was learned from a real incident (wes-work-planning#67).
 
 **Pattern A — long-lived, single-instance consumer group (a named
 constant).** Use when exactly ONE instance of this consumer ever runs at
-a time (e.g. this service's own analytics projector). The group id is a
-plain named constant (`AnalyticsConsumerGroup`), reused across restarts —
+a time (e.g. this service's own analytics projector,
+`internal/adapters/inbound/kafka/analytics_consumer.go`). The group id
+is a plain named constant, reused across restarts —
 that's correct because Kafka's committed-offset resume semantics are
 EXACTLY what you want: pick up where the single instance left off.
 
 **Pattern B — per-process-unique consumer group (a generated id).** Use
 when this consumer rebuilds a complete read model from a topic's FULL
-history on every start (an event-sourced local cache, not a work queue) —
-see `facilitycache/consumer.go`'s `consumerGroupPrefix` +
-`uniqueConsumerGroup()`. The group id MUST be unique per process instance
+history on every start (an event-sourced local cache, not a work queue).
+The group id MUST be unique per process instance
 (hostname+PID+timestamp), NEVER a fixed shared string. Consumer group
 offsets are shared infrastructure state: a brand-new process joining a
 group an EARLIER instance already consumed resumes from that instance's
 committed offset, so the new process gets marked "ready" with an empty
 local cache having replayed nothing — a silent correctness bug, not a
-crash.
+crash. (This repo currently has no consumer of that shape — its
+consumers are all Pattern A.)
 
 **Never do this** (the actual incident): a fixed shared consumer group id
 on a consumer meant to run as exactly one instance per environment. When
 a local dev/test harness process joins the SAME broker's SAME group as a
 live in-cluster Deployment, Kafka's rebalance protocol hands the
 partition to only ONE of the two group members — the other silently
-starves. Fix: make the group id env-configurable
-(`KAFKA_CONSUMER_GROUP`/`<SERVICE>_CONSUMER_GROUP`), never hardcode it as
-a literal string. This fleet's `internal/architecture/`
-`TestKafkaConsumerGroupNeverHardcodedInline` fitness test (where present)
+starves. Fix: make the group id env-configurable (this repo uses one
+`<NAME>_CONSUMER_GROUP` env var per consumer, read in `cmd/api/config.go`),
+never hardcode it as a literal string. This repo's
+`internal/architecture/`
+`TestKafkaConsumerGroupNeverHardcodedInline` fitness test
 enforces this statically — an inline `GroupID: "literal"` fails CI.
 
 ### 4. Readiness gate, if this consumer backs a local cache

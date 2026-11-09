@@ -60,9 +60,10 @@ not a preference — there is nothing to "choose" here:
   `content-type` header); a legacy-flat-message-rejected test per consumer;
   Kafka integration tests via testcontainers only.
 
-Full standard, subdomain table and the fleet's cross-service type catalogue:
-warehouse-docs `docs/strategic-design/event-standard-cloudevents.md`.
-Recorded in this repo as `docs/adr/0005-cloudevents-envelope-and-type-catalogue.md`.
+Full standard, subdomain table and the fleet's cross-service type catalogue
+live in the warehouse-docs repo (its strategic-design event-standard page,
+cross-repo). Recorded in this repo as
+`docs/adr/0005-cloudevents-envelope-and-type-catalogue.md`.
 
 ### Published types
 

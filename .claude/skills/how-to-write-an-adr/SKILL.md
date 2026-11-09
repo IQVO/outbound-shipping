@@ -15,33 +15,17 @@ addition inside an already-decided architecture doesn't.
 
 ## Numbering and location
 
-`docs/docs/adr/NNNN-kebab-case-title.md`, four-digit zero-padded,
+`docs/adr/NNNN-kebab-case-title.md`, four-digit zero-padded,
 sequential — check the highest existing number
-(`git ls-tree --name-only origin/develop -- docs/docs/adr/` and pick the
-next integer, never reuse or guess). `docs/docs/adr/about.md` explains the
-format to readers; you don't need to touch it when adding a new ADR.
-
-## Frontmatter (Docusaurus needs all five fields)
-
-```yaml
----
-id: NNNN-kebab-case-title
-slug: /adr/NNNN-kebab-case-title
-title: "NN. Title (a short noun phrase, matching the heading)"
-sidebar_label: "NN. Short label for the nav sidebar"
-sidebar_position: NN
-description: "One or two sentences — this shows up in search and link
-  previews, so make it stand alone without the rest of the doc."
----
-```
-
-`id`/`slug` are the full kebab-case filename (minus `.md`); `title`/
-`sidebar_label` repeat the number as plain text (`"13. ..."`, not `#13`);
-`sidebar_position` is the bare integer. Getting these inconsistent is the
-most common cause of a broken sidebar entry or 404 after merge — verify
-by running the docs build (see below) before opening the PR.
+(`git ls-tree --name-only origin/develop -- docs/adr/` and pick the
+next integer, never reuse or guess). The existing `0001`–`0005` are
+plain markdown; there is no generated docs site in this repo.
 
 ## Format: Michael Nygard's template
+
+No frontmatter — this repo's ADRs start directly with a numbered
+`# ADR NNNN: Title` heading (ADR 0001 uses the short `# 1.` form), then
+Nygard sections:
 
 ```markdown
 # NNNN. Title (a short noun phrase)
@@ -70,19 +54,19 @@ lists benefits reads as marketing, not a decision record.
 ```
 
 The `## Decision` section is the part worth the most editing effort: see
-ADR-0013 (`docs/docs/adr/0013-location-classification-via-facility-events.md`)
-for a model example — it states the exact mechanism (event-fed local
-cache replacing a synchronous HTTP read), names the readiness-gate design,
-and is specific enough that Task "how-to-add-an-integration-event"'s
-consumer-group guidance can point straight at it.
+ADR-0005 (`docs/adr/0005-cloudevents-envelope-and-type-catalogue.md`)
+for a model example — it pins the exact envelope mechanism, the
+type-naming rule and where the catalogue lives, and is specific enough
+that `.claude/rules/integration-events.md` and the
+how-to-add-an-integration-event skill can point straight at it.
 
 ## Superseding an earlier ADR
 
 Don't edit the old ADR's Decision section. Add a `## Status` line noting
 `Superseded by ADR-XXXX` on the OLD one (a one-line patch), and open the
 new ADR referencing it: `**Accepted.** <date>. Supersedes [NN. Old title](./NNNN-old-slug.md).`
-— see ADR-0015 (`0015-remove-rest-identity-layer.md`) for the exact
-wording pattern superseding ADR-0014.
+(No ADR in this repo has been superseded yet; follow the same wording
+when the first one is.)
 
 ## Cross-repo decisions: use a companion ADR, not one repo's private opinion
 
@@ -94,17 +78,10 @@ split of responsibility — see facility-layout's ADR-0016/0017 pair. Don't
 write the decision once in one repo and expect the other repo's readers
 to find it; each bounded context's docs site is read independently.
 
-## After writing: regenerate and verify the docs build
+## After writing: verify what you can
 
-```bash
-cd docs
-npm ci
-npm run build   # onBrokenLinks / onBrokenAnchors are both 'throw' — this
-                 # WILL fail if the frontmatter/slug is wrong or a
-                 # cross-reference link is broken
-```
-
-A broken ADR link or malformed frontmatter fails the build with a clear
-Docusaurus error, not a silent 404 — always run this locally before
-opening the PR; several repos in this fleet gate this in CI
-(`docs-api-drift`/dedicated docs build job) but not all yet.
+There is no generated docs site to build — `docs/adr/` is plain markdown
+committed as-is. Before opening the PR, check that any relative links you
+added resolve (`./0005-cloudevents-envelope-and-type-catalogue.md` style)
+and that the numbering/heading match the existing files; a broken
+relative link is a silent 404 for the next reader.

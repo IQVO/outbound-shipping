@@ -9,9 +9,7 @@ argument-hint: "[git range]"
 
 Perform a ubiquitous-language drift review of the current changes (or
 `$ARGUMENTS` if given), comparing new/changed code against
-`.claude/rules/domain-model.md` (or this repo's equivalent doc — check
-`AGENTS.md`/`CLAUDE.md` for where the ubiquitous language lives if that
-file doesn't exist here).
+`.claude/rules/domain-model.md`, this repo's ubiquitous-language doc.
 
 Ubiquitous language drift is the quiet failure mode DDD is supposed to
 prevent: code that technically works but silently renames, reshapes, or
@@ -22,16 +20,16 @@ readers can no longer map code to domain conversation.
 
 1. **A new type/field/method that duplicates an existing domain concept
    under a different name.** If the domain-model doc already names a
-   concept (e.g. this repo's "Usable inventory" — on-hand minus active
-   reservations minus held/damaged), a new calculation that computes the
-   same thing under a different name (`AvailableQty`, `FreeStock`, etc.)
-   is drift — even if the math is correct, it fragments the vocabulary.
-   Flag it and point at the existing name.
+   concept (e.g. this repo's "Missed Load" — a package that was not
+   loaded by its cutoff), a new calculation that computes the
+   same thing under a different name (`LatePackage`, `CutoffMiss`,
+   etc.) is drift — even if the math is correct, it fragments the
+   vocabulary. Flag it and point at the existing name.
 2. **A domain type/method named in implementation terms instead of
    domain terms.** `internal/domain/` code should read like the ubiquitous
    language, not like database/HTTP vocabulary — a method called
    `UpdateRow` or `PatchState` where the domain-model doc would call the
-   equivalent operation `Stow`/`Revoke`/`RunCycleCount` is drift, and the
+   equivalent operation `Stage`/`ShortShip`/`CloseLoad` is drift, and the
    fitness-test suite won't catch this because it's a naming problem, not
    an import-direction problem.
 3. **An invariant enforced in code that the domain-model doc doesn't
@@ -41,19 +39,21 @@ readers can no longer map code to domain conversation.
    invisible to the next person who touches that aggregate and may
    accidentally remove it thinking it's dead code.
 4. **A value object that should be closed but was implemented open (or
-   vice versa).** This repo's own domain-model doc calls out
-   `HandlingTag` as a deliberately CLOSED enum (unlike facility-layout's
-   open `LocationType`) because it carries real regulatory meaning —
+   vice versa).** This repo's own domain-model doc pins the aggregate
+   lifecycles as deliberately CLOSED state sets (EXPECTED -> STAGED ->
+   LOADED -> SHIPPED, or SHORT_SHIPPED, for ShippingPackage; PLANNED ->
+   LOADING -> CLOSED -> SHIP_CONFIRMED, or CANCELLED, for OutboundLoad) —
    check any new categorical field against whether the domain actually
    wants an open or closed set, and flag a mismatch either direction.
 5. **A cross-aggregate rule implemented as a cross-aggregate call instead
    of an explicit local check, or vice versa**, per whatever this repo's
    own domain-model doc says about which invariants are local vs. which
-   legitimately need external state (e.g. this repo's DOT segregation
-   check is explicitly documented as "purely LOCAL... no cross-context
-   call" — a change that quietly makes it call out to another service
-   would be a real regression worth flagging even if functionally it
-   still "works").
+   legitimately need external state (e.g. `ErrDuplicateOpenLoad` — one
+   open load per site/cpt/date/ship method — is enforced purely LOCALLY,
+   use case plus the partial unique index, with no cross-context call; a
+   change that quietly makes it call out to another service would be a
+   real regression worth flagging even if functionally it still
+   "works").
 6. **New terminology introduced without updating the domain-model doc.**
    If new code introduces a genuinely new domain concept the doc doesn't
    yet name, that's not necessarily wrong — but the doc needs a new entry
