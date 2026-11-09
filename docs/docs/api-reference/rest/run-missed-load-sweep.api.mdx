@@ -1,0 +1,74 @@
+---
+id: run-missed-load-sweep
+title: "Sweep for packages that missed their load (create a sweep)"
+description: "Cron-driven (the scheduler calls it at each cutoff): every `EXPECTED`"
+sidebar_label: "Sweep for packages that missed their load (create a sweep)"
+hide_title: true
+hide_table_of_contents: true
+api: eJztWOFuG7kRfpUB/5zk7sqSGicX5U9zttIzkjiprLRFLeN2tDta8cwlNyTXsmAI6EP0CfskxXB3JcXS5a5AgRZF/MfQkhwOv/lm+A0fhSnJopdGX2ZiJGyl30vnKHtnMLteEZUiEhm51MqSJ4mROLdGx5mV96Sh45cELl1SVimykKJSDqQH9ECYLiGtvFksuiOge7JrSMZ//Tg+n44vkpk2FpLr6es/ji8SKDG9w5xgtTSOmkWwRAclsi9gUTpykHys5+08TGaaHjD1ag1GpwT//Ps/AMFSbCsNjt2Hspor6ZbkQBu/lDoHTava8YXCPKcMFpj6mZYOLBVUzMlSBkYDT2k86/bgMqOiNJ60h5Is3NEalLyj5mQfP1xPezMtIuExd2J0IwJ4TtxGokSLBXmy/P1RaCxIjMTWXrqO39JaREIyukvCjKyIhKXPlbSUiZG3FR0EAZUiGxdSe8qCM52FIvKQVzIjJTXB5Pfx5KzbgzfSOg+VI6AHSitP7hXgTFsqFa7Bkq+sduGwzhs+uiVXGu0IVtIvIdl3dBIWUTYCdip5NdMYNrdUcZzCAoRMLhZkGam5ydYgHSTP+i9B7hm6o3VcL0pq2JhEBYrRo/DrkvFx3kqdi0gUUr8jnfulGA2eR6LAh+3P4feRoAcsSkUBc+cxp7i8y+NBf/gyHvaHzweD/vPY0ue4PxC3m81tDSw5/4PJ1rzdU5xToznIPIRlqWQakuP0Z8e4Px76aeY/U+q/CNiNcNLTTzIL0becYV6yh4/bgV8555fHur6cjuMBG/PSK150LT1dZmITiTpZjtlbGFugFyORoafYy4IOUjlwtGZwnRrowViY08JYAr+UrknGV5DRAivlHXgD2qx6YrPZufOkZExqhMVmw5NaOoXzD/t9/velG1PmXnDFon4VqBiIk5pKewerJXouKm26hu2jJlOC1WMUPbKNrbjEkK5PtqM58o96FSysKQDbVJC7pK+TRxoNHU6rY5SdG6MImc2kq0KMbphRtwGE/wirGgAOWdUO7NZzXchDHSmklgV7038a/aaaOi6Iar2Fd76G6Y+X18AltFOXUhcG2wLa7THx3IpK/xP630i9r9LFVaply7NjBHmPik2yc8wLYwGhkM5JnZ9KfY9KctWqgYKFJJVBJ5ljFje5noR4/UIMSmvmiorf/XuxCGPtkSKuPL5yYZOMDgNUW3oK1A6SIyONxcOQbppNjuD+JLs9zhXfcnwvkLXGAi+EDvXyHiTN1eZiU3nnUWdS5zVQ+7Xn2Cxxu+G9PEp1xPW9QH+sod2G9uVhaOsSZGlROVTQSX7hkvgWwP+BAJ4dy81Pmh5KSn3QUVJVljiK2pPVqOLg9bfo/fejt4lEQX5pWOSXxjGeJbLWEKdFKMexMpjFrlatkXBk71vFWlnFytT70o1OT03l56bSWeyWsiylznsrtLQ0laPYrZ2nwvXa+B+AcqnjVFXOk4XOW6NzsKbyBKdYykPDXcF6jYkx2Wm2cY3OF2KqVUg7OSSG/eGzuP8iHr6cDs5GZ4PR8Pte/8Xgbxw/qRcmINfg9KHZGK6bjeH1x0sRCQagdnvQ6/f6DYcxDRxuZPyB01Cg1B6lZvSiJ9jl0i+reS81xenln/784fDIHP4iBPbQ8h/k53vTa9jBNvgsSqakHe159Onq3eX5+Op6fCE2B22DKQrUmQPUGXyuyEpyYBZBcp2cHOx4cgLhA2UQsvfBQ+cv769n2lXzzPBBI3h9MYF+vz/ojoDld42AlgtyXBJa/rKy5E0yY2wEpUKtpc5nmv1g4vEyHm9dCB9hYSwY3XaEEaTKuCBTdQbsY5wavZC2CKakb5s2b1Eqst85KJdrJ1NUkFGJ1ofi1Dg87EbBjnSuanefS6Vm2ixABY96Mz3TJycTpqjrnZzAOPR6NWXnpMyKe5v6WAwGFCYj9Z2DxLLoACWdh3uyc/SyGM10ZtI7qPttYx2EHnrb+7oUtYNO0oDokgiSBhmXRDOdVHr7sxtBsOWqkuy9dMEapTKjgBubYagqS8GMJVOS3hpKUaekVCi/PP7Dh3eQ3BuZBcOMCe719HVFgLpI1OZ7MF3STHOJkCkxBisrvQ/C2poq5x7QW9QOU94DVR3WhxEgTMbXU0hrGs50yRnmfA0i5rmlHD3B66sLkN4BKkuYrWPSXDkzOFemysb3xF2B1EyNmd7b6FXo/bmrzSzKuqktuGF5i4s7nOlOsq1UvcMqRsFusmX0WbeJ/153sSMBN/zg8Y6prb9skt/SOmnbcT7uTO835d1ROOwidOWNPt125lE4wUFjbqzMpUbFXftv7c3bSB605zN9cfnmzXgyvppu+3P8aocOncmzFowxX2Tu5ATQEkzenMPLZ2cvYP8Sb18BagASjlwSGNNkCR8iqD0HBZYwGA04RHzMNn1Y0luJurk2XQR8Zc508PHovQmdZGxt29B82L9Ro2ZduN608TFnRjgUL+Em5Mr48/pbPXk45E4nbhIxVqZWKs2KK+Ov65F37QBjw7WW79UC9V4trtUtl7FtIfTczTbZ5JckbV3qOqklpj7WCdd9enM+7vTTtxe4X3mBqwURX1enpUIZYhPu4cdG89yII5rnNhJLFkajG/H4OEdHn6zabPgzX5RrMbq5jUQg5pxVww2rsOa1jkVSJh0PZGK0QOWePtjth68zaYRsF/7vnvGOYn9H66MPnveoKp4tNtFjM+m8Rime1vq+nXHwZrJb8TpNqfRfnXu7p32ZJiIS8+b1rwhSXlhccYOBK/YmEiZELaj/8O1RKNR5hTnPrW3y378AOuEnMA==
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/outbound-shipping-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Sweep for packages that missed their load (create a sweep)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/missed-load-sweeps"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Cron-driven (the scheduler calls it at each cutoff): every `EXPECTED`
+or `STAGED` package whose cutoff has passed raises `PackageMissedLoad`
+exactly once — a re-run sweep publishes nothing new (the flagged fact
+is remembered on the package). Idempotent per key like every POST.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./run-missed-load-sweep.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./run-missed-load-sweep.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./run-missed-load-sweep.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

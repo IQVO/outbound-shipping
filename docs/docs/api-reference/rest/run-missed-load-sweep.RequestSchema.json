@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["site_id"],"properties":{"site_id":{"type":"string","minLength":1,"examples":["SITE-1"],"title":"SiteId"},"cutoff":{"type":"string","format":"date-time","description":"Sweep everything at or before this cutoff; defaults to now."}},"title":"MissedLoadSweepRequest"}}}}}

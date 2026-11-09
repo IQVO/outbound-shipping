@@ -1,0 +1,75 @@
+---
+id: cancel-load
+title: "Cancel a planned load (create a cancellation)"
+description: "Moves a `PLANNED` load to `CANCELLED` and publishes `LoadCancelled`."
+sidebar_label: "Cancel a planned load (create a cancellation)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/outbound-shipping-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Cancel a planned load (create a cancellation)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/loads/{loadId}/cancellations"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Moves a `PLANNED` load to `CANCELLED` and publishes `LoadCancelled`.
+Only a `PLANNED` load can be cancelled — a load already `LOADING`
+must be resolved instead (short-ship and close, or reopen later): the
+refusal is `409 load-state` (`ErrInvalidTransition`). A
+`SHIP_CONFIRMED` load refuses with `409 load-confirmed`.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./cancel-load.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./cancel-load.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./cancel-load.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

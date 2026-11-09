@@ -1,0 +1,73 @@
+---
+id: reopen-load
+title: "Reopen a closed load (create a reopening)"
+description: "Moves a `CLOSED` load back to `LOADING` and publishes `LoadReopened`"
+sidebar_label: "Reopen a closed load (create a reopening)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: docs/api-reference/rest/outbound-shipping-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Reopen a closed load (create a reopening)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/loads/{loadId}/reopenings"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Moves a `CLOSED` load back to `LOADING` and publishes `LoadReopened`
+so yard-management reopens the door work. A `SHIP_CONFIRMED` load
+never changes: `409 load-confirmed` (`ErrLoadConfirmed`).
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./reopen-load.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./reopen-load.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./reopen-load.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

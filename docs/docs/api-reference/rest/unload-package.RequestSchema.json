@@ -1,0 +1,1 @@
+{"title":"Body","body":{"required":true,"content":{"application/json":{"schema":{"type":"object","properties":{"reason":{"type":"string","description":"Why the package came back off the load (published on PackageUnloaded).","examples":["damaged-carton"]}},"title":"UnloadPackageRequest"}}}}}
