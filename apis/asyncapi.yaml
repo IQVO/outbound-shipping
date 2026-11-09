@@ -268,6 +268,7 @@ channels:
 components:
   messages:
     LoadPlanned:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: LoadPlanned
       title: Load planned
       summary: A load was planned for one cutoff and ship method.
@@ -303,6 +304,7 @@ components:
               version: 1
 
     LoadDoorAssigned:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: LoadDoorAssigned
       title: Load door assigned
       summary: An outbound dock appointment assigned the load's door.
@@ -336,6 +338,7 @@ components:
               version: 2
 
     LoadingStarted:
+      x-no-consumer-reason: "pending: ADR 0005 names yard-management as the integration consumer, but yard-management declares no such consumer and has no handler for it on develop."
       name: LoadingStarted
       title: Loading started
       summary: Loading began at the assigned door with the docked trailer.
@@ -371,6 +374,7 @@ components:
               version: 3
 
     LoadClosed:
+      x-no-consumer-reason: "pending: ADR 0005 names yard-management as the integration consumer, but yard-management declares no such consumer and has no handler for it on develop."
       name: LoadClosed
       title: Load closed
       summary: Every package is loaded or short-shipped; the load is closed.
@@ -408,6 +412,7 @@ components:
               version: 4
 
     LoadReopened:
+      x-no-consumer-reason: "pending: ADR 0005 names yard-management as the integration consumer, but yard-management declares no such consumer and has no handler for it on develop."
       name: LoadReopened
       title: Load reopened
       summary: A supervisor reopened a closed load for more loading.
@@ -441,6 +446,7 @@ components:
               version: 5
 
     LoadCancelled:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: LoadCancelled
       title: Load cancelled
       summary: A planned load was cancelled before loading.
@@ -515,6 +521,7 @@ components:
               version: 6
 
     PackageStaged:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: PackageStaged
       title: Package staged
       summary: A manifested package was staged at a Staging location.
@@ -549,6 +556,7 @@ components:
               version: 2
 
     PackageLoaded:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: PackageLoaded
       title: Package loaded
       summary: A package was loaded onto its load through the load's door.
@@ -581,6 +589,7 @@ components:
               version: 3
 
     PackageUnloaded:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: PackageUnloaded
       title: Package unloaded
       summary: A loaded package came back off the load before ship-confirm.
@@ -654,6 +663,7 @@ components:
               version: 2
 
     BillOfLadingIssued:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: BillOfLadingIssued
       title: Bill of lading issued
       summary: The shipping document of one confirmed load was issued.
@@ -693,6 +703,7 @@ components:
               version: 1
 
     BillOfLadingVoided:
+      x-no-consumer-reason: "No integration consumer by design: the ADR 0005 type catalogue lists this type as analytics only; the service's own projector folds it from the analytics stream."
       name: BillOfLadingVoided
       title: Bill of lading voided
       summary: An issued bill of lading was voided.
