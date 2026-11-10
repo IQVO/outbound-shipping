@@ -18,13 +18,20 @@ import (
 // — and AssignPackageToLoad — record the package as EXPECTED on that load.
 //
 // The one-open-load race (two packages of one cutoff manifesting
-// simultaneously) is settled by the partial unique index
-// uq_open_load_per_cutoff: the losing Plan INSERT fails with
-// repository.ErrDuplicateOpenLoad and its whole unit of work — claim included
-// — rolls back; Handle then retries the ENTIRE application once on a fresh
-// transaction, which re-claims the id and finds the winner's committed load.
-// Both packages land on the ONE load (proven by the concurrency integration
-// test).
+// simultaneously) has TWO places the loser can learn it lost, and both are
+// the same race signal (lostPlanRace):
+//
+//   - the rival committed between findOrPlan's two READ COMMITTED reads
+//     (FindOpenByKey missed, OpenLoadKeys sees the rival), so the domain's
+//     Plan refuses with outboundload.ErrDuplicateOpenLoad;
+//   - the rival committed before the INSERT, so the partial unique index
+//     uq_open_load_per_cutoff refuses with repository.ErrDuplicateOpenLoad.
+//
+// Either way the whole unit of work — claim included — rolls back and Handle
+// retries the ENTIRE application once on a fresh transaction, which
+// re-claims the id and finds the winner's committed load. Both packages land
+// on the ONE load (proven by the concurrency integration test and, for each
+// interleaving deterministically, by expect_package_race_test.go).
 type ExpectPackage struct {
 	Intake
 	Loads    ports.LoadRepo
@@ -49,18 +56,27 @@ type Manifest struct {
 	ManifestedAt  time.Time
 }
 
-// Handle applies one manifestation, retrying once when the one-open-load
-// race backstop fired.
+// Handle applies one manifestation, retrying once when it lost the
+// one-open-load race.
 func (uc *ExpectPackage) Handle(ctx context.Context, eventID string, m Manifest) (Outcome, error) {
 	outcome, err := uc.apply(ctx, FulfillmentConsumer, eventID, func(ctx context.Context) (Outcome, error) {
 		return uc.expect(ctx, m)
 	})
-	if errors.Is(err, repository.ErrDuplicateOpenLoad) {
+	if lostPlanRace(err) {
 		return uc.apply(ctx, FulfillmentConsumer, eventID, func(ctx context.Context) (Outcome, error) {
 			return uc.expect(ctx, m)
 		})
 	}
 	return outcome, err
+}
+
+// lostPlanRace reports whether err means a rival committed an open load of
+// the same cutoff key while this attempt was planning one: refused by the
+// domain (the rival was visible to OpenLoadKeys but not yet to
+// FindOpenByKey) or by the partial unique index on insert.
+func lostPlanRace(err error) bool {
+	return errors.Is(err, outboundload.ErrDuplicateOpenLoad) ||
+		errors.Is(err, repository.ErrDuplicateOpenLoad)
 }
 
 func (uc *ExpectPackage) expect(ctx context.Context, m Manifest) (Outcome, error) {
@@ -136,10 +152,11 @@ func (uc *ExpectPackage) cutoffKey(ctx context.Context, m Manifest) (outboundloa
 }
 
 // findOrPlan returns the open load of key, planning it (LoadPlanned) when
-// there is none. planned reports whether this call planned it. The insert of
-// a raced plan fails on uq_open_load_per_cutoff and surfaces
-// repository.ErrDuplicateOpenLoad, which Handle retries on a fresh
-// transaction.
+// there is none. planned reports whether this call planned it. A raced plan
+// fails either in the domain (outboundload.ErrDuplicateOpenLoad: the rival
+// committed between the two reads) or on uq_open_load_per_cutoff
+// (repository.ErrDuplicateOpenLoad); Handle retries both on a fresh
+// transaction (lostPlanRace).
 func (uc *ExpectPackage) findOrPlan(ctx context.Context, key outboundload.LoadKey, cutoff time.Time) (load *outboundload.OutboundLoad, planned bool, err error) {
 	load, err = uc.Loads.FindOpenByKey(ctx, key)
 	if err != nil {
