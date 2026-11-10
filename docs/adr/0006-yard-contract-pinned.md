@@ -26,5 +26,4 @@ only on its analytics topic, so a closed load could never be confirmed. No test 
 
 - A producer that moves a consumed type off its integration topic turns the gate red here before the consumer silently stops
   receiving it.
-- The dock-scheduling row is still pinned by hand from the producer's feature branch; its AsyncAPI has a different layout and
-  is a follow-up.
+- The dock-scheduling row is closed by ADR 0007.

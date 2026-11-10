@@ -47,8 +47,8 @@ there is no Helm chart and no warehouse-infra entry yet
    appointments and yard facts are event-fed local copies. There is no HTTP
    client to another service; no `retailnetwork.*` topic is consumed or
    produced (network-fulfillment is the only channel to the network, ADR 0004).
-7. **The yard contract is pinned** (ADR 0006): `contracts/yard-management.asyncapi.yaml`
-   is a copy of the producer's `develop` spec listed in `contracts/pinned.json`;
+7. **The yard and dock contracts are pinned** (ADR 0006, 0007): `contracts/yard-management.asyncapi.yaml`
+   and `contracts/dock-scheduling.asyncapi.yaml` are copies of the producers' `develop` specs listed in `contracts/pinned.json`;
    the `pinned-contracts` job fails when it drifts. Re-copy it, never edit it.
 8. **Consumers**: group ids only from env vars (`FULFILLMENT_`, `DOCK_`,
    `YARD_`, `CPT_`, `LAYOUT_`, `ANALYTICS_CONSUMER_GROUP`;

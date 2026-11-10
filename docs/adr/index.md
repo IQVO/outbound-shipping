@@ -20,3 +20,4 @@ immutable; a changed decision gets a new ADR that supersedes the old one. The
 | [0004](/docs/adr/0004-shipment-confirmed-replaces-the-manual-network-confirmation) | ShipmentConfirmed replaces the manual network shipment confirmation | Accepted (2026-11-06). Finalizes design draft OS-0004; decision D6 is FINAL. |
 | [0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue) | CloudEvents envelope and type catalogue | Accepted (2026-11-06) |
 | [0006](/docs/adr/0006-yard-contract-pinned) | The yard-management contract is pinned and tested | Accepted (2026-11-09). Refines ADR 0002 and ADR 0005 (the yard rows of the consumed catalogue). |
+| [0007](/docs/adr/0007-dock-scheduling-contract-pinned) | The dock-scheduling contract is pinned and tested | Accepted (2026-11-10). Completes ADR 0006. |

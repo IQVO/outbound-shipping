@@ -18,10 +18,9 @@ const DockTopic = "warehouse.dock-scheduling.events"
 // acts on.
 const TypeDockAppointmentBooked = "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked"
 
-// The payload mirrors dock-scheduling's contract, pinned from the
-// producer's origin/feature/service (campaign spike Q5; its develop
-// AsyncAPI does not exist yet — re-pin from origin/develop before fleet
-// wiring). cpt_id and carrier_scac are NULLABLE: an appointment without a
+// The payload mirrors dock-scheduling's merged contract, pinned at
+// contracts/dock-scheduling.asyncapi.yaml (ADR 0007, proven by
+// dock_contract_test.go). cpt_id and carrier_scac are NULLABLE: an appointment without a
 // cpt names no load. The extra fields (asn_numbers, shipment_refs,
 // expected_seal_number, arrival_tolerance_minutes, provenance...) are
 // ignored. The re-pin rule: a field this contract names that the merged
