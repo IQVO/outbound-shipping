@@ -1,3 +1,10 @@
+---
+paths:
+  - "internal/domain/**"
+  - "internal/application/**"
+  - "features/**"
+---
+
 <!-- outbound-shipping: filled from the canonical model (campaign model.yaml). -->
 # Domain model: ubiquitous language, aggregates, events, use cases
 
@@ -47,6 +54,10 @@
 
 ## Key use cases (`internal/application/usecases`)
 
-Wave 5 builds them from the model's policies: PlanLoadFromCutoff,
-AssignPackageToLoad, DoorFromAppointment, StartOnDock, ConfirmOnDeparture,
-FlagDepartureWithoutClose, SweepMissedLoad, DropDiverted.
+One type per use case: commands `StagePackage`, `LoadPackage`,
+`UnloadPackage`, `CloseLoad`, `ReopenLoad`, `CancelLoad`, `VoidBillOfLading`,
+`SweepMissedLoads`; event-fed `ExpectPackage` (plans the load from the cutoff
+and assigns the package), `DivertPackage`, `BookAppointment` (door from the
+appointment), `DockTrailer`, `RecordDoorWork`, `OnDeparture` (confirm a
+CLOSED load, or flag every unloaded package when it is still LOADING),
+`ApplyCptSchedule`, `ApplyLayout`, `ProjectBoard`; reads in `Queries`.

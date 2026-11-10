@@ -169,4 +169,5 @@ guide-lint: ## lint agent guides: skills load, references resolve, context budge
 
 harness-test: ## unit-test the agent hooks (pre/post/stop) and the pinned-contract gate
 	python3 scripts/harness/test_hook.py
+	python3 scripts/harness/test_red_issue.py
 	python3 scripts/harness/test_pinned_contract_gate.py
