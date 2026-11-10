@@ -29,6 +29,19 @@ type cptCutoff struct {
 	ShipMethod string   `json:"ship_method"`
 }
 
+// cptVersion is the version stored with a schedule copy. process-path-management's
+// CPTScheduleChanged is a full snapshot keyed by site_id and carries NO version
+// field (its AsyncAPI has none), so a real payload decodes to 0; the copy is
+// replaced wholesale, last writer wins per site, so the number orders nothing.
+// Treating 0 as invalid dead-lettered every real event and no load could ever
+// be planned. A producer that does send a version keeps it.
+func cptVersion(v int64) int64 {
+	if v < 1 {
+		return 1
+	}
+	return v
+}
+
 type cptScheduleChangedData struct {
 	SiteID   string      `json:"site_id"`
 	Timezone string      `json:"timezone"`
@@ -64,7 +77,7 @@ func CptHandlers(uc CptUseCases, logger *slog.Logger) map[string]HandlerFunc {
 					SiteID:   shared.SiteID(d.SiteID),
 					Timezone: d.Timezone,
 					Cutoffs:  entries,
-					Version:  d.Version,
+					Version:  cptVersion(d.Version),
 					Changed:  at,
 				})
 			})

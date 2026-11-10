@@ -195,3 +195,30 @@ components:
 		t.Error("an analytics-only type must not count as published on the integration channel")
 	}
 }
+
+// The real CPTScheduleChanged carries no version (process-path-management's
+// AsyncAPI example has site_id, timezone and cutoffs only): it must decode and
+// get a storable version instead of being dead-lettered.
+func TestRealCptScheduleWithoutAVersionIsAccepted(t *testing.T) {
+	const payload = `{"specversion":"1.0","id":"1d2e3f4a-5b6c-4d7e-8f9a-0b1c2d3e4f5a","source":"/warehouse/process-path-management",` +
+		`"type":"com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged","subject":"sp1","time":"2026-09-13T00:00:00Z",` +
+		`"datacontenttype":"application/json","data":{"site_id":"sp1","timezone":"America/Sao_Paulo",` +
+		`"cutoffs":[{"cpt_id":"sp1-1500","local_time":"15:00","days_of_week":["Mon","Tue"],"ship_method":"ground","eligible_path_ids":["PICK"]}]}}`
+	var ev ce.Event
+	if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+		t.Fatal(err)
+	}
+	d, err := decodeData[cptScheduleChangedData](ev)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if d.SiteID != "sp1" || len(d.Cutoffs) != 1 || d.Version != 0 {
+		t.Fatalf("decoded %+v", d)
+	}
+	if got := cptVersion(d.Version); got != 1 {
+		t.Errorf("version stored for a payload without one = %d, want 1 (the copy table requires >= 1)", got)
+	}
+	if got := cptVersion(7); got != 7 {
+		t.Errorf("a producer-sent version must be kept, got %d", got)
+	}
+}
