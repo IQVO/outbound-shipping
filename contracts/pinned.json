@@ -1,1 +1,1 @@
-{"pins": [{"local": "contracts/yard-management.asyncapi.yaml", "repo": "IQVO/yard-management", "path": "apis/asyncapi.yaml", "ref": "develop"}]}
+{"pins": [{"local": "contracts/yard-management.asyncapi.yaml", "repo": "IQVO/yard-management", "path": "apis/asyncapi.yaml", "ref": "develop"}, {"local": "contracts/dock-scheduling.asyncapi.yaml", "repo": "IQVO/dock-scheduling", "path": "apis/asyncapi.yaml", "ref": "develop"}]}
