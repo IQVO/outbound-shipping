@@ -14,12 +14,12 @@ Source: `Makefile`, `.github/workflows/ci.yml`, `.gremlins.yaml`, `features/`, `
 | Layer | Where | Count | Needs | Notes |
 |---|---|---|---|---|
 | Domain unit | `internal/domain/{outboundload,shippingpackage,billoflading,shared}` | 70 test functions | nothing | Invariants, transitions, rehydration validation, short-ship validity. Pure Go, no I/O. |
-| Use-case unit | `internal/application/usecases/*_test.go` | 43 | nothing | The consumer policies and REST commands over the in-memory doubles (`internal/adapters/outbound/memory`): expect, scan, load commands, on-departure, edges, projector, queries. |
+| Use-case unit | `internal/application/usecases/*_test.go` | 44 | nothing | The consumer policies and REST commands over the in-memory doubles (`internal/adapters/outbound/memory`): expect, scan, load commands, on-departure, edges, projector, queries. |
 | Adapter unit | `internal/adapters/kafka/cloudevents`, `internal/adapters/outbound/kafka` | 8 | nothing | CloudEvents build and decode, writer settings. |
 | BDD (godog) | `features/ship_confirm_on_departure.feature`, runner `features/features_test.go` (`TestFeatures`) | 1 feature file, **6 scenarios** | nothing | Drives the same use cases `cmd/api` wires, over the in-memory doubles, with an outbox recorder standing in for the relay. Strict mode. |
-| Contract | `internal/adapters/inbound/kafka/producer_contract_test.go`, `contracts/` | 2 | nothing | See below. |
+| Contract | `internal/adapters/inbound/kafka/producer_contract_test.go`, `dock_contract_test.go`, `contracts/` | 5 | nothing | See below. |
 | Integration | `internal/adapters/outbound/postgres/service_integration_test.go` (`//go:build integration`) | 3 (one is `TestMain`) | Docker | Real Postgres through testcontainers (`internal/testing/pgtest`): `TestExpectPackagePlansExactlyOneLoadUnderConcurrency` (the one-open-load race backstop) and `TestServicePathOverPostgres` (a full path through the real adapters). |
-| Fitness (architecture) | `internal/architecture/` | 12 files, 37 test functions | nothing | See below. |
+| Fitness (architecture) | `internal/architecture/` | 13 files, 37 test functions | nothing | See below. |
 | Mutation | `.gremlins.yaml` | n/a | `gremlins` v0.6.0 | See below. |
 
 There are **no handler tests** for the REST adapter (`internal/adapters/inbound/http`) and **none for the MCP adapter** (`internal/adapters/inbound/mcp`); both are covered only indirectly (architecture sensors, the BDD feature through the use cases). The Kafka consumers' decode paths are likewise exercised mostly through the use-case tests and the yard contract test. There is no end-to-end test of the Kafka consumers against a live broker in this repository (`internal/testing/kafkatest` exists as a helper; no test in the tree uses it).
@@ -28,9 +28,9 @@ There are **no handler tests** for the REST adapter (`internal/adapters/inbound/
 
 All six are in `features/ship_confirm_on_departure.feature`: manifest, stage, load, close and depart with one bill of lading; a departure while `LOADING` that never confirms and flags what missed; a departure that arrives before the load closes (handled, never confirmed, and a re-delivery changes nothing); a departure delivered twice confirms once; a diverted package short-ships and the load still closes; the missed-load sweep flags once even when it runs twice.
 
-### Contract test: the yard-management pin
+### Contract tests: the yard-management and dock-scheduling pins
 
-`contracts/yard-management.asyncapi.yaml` is a copy of yard-management's `apis/asyncapi.yaml` on `develop`, listed in `contracts/pinned.json`. `TestConsumedYardTypesMatchTheProducersIntegrationContract` proves each consumed yard type (`TrailerDocked`, `DoorWorkCompleted`, `TrailerDeparted`) is declared on the producer's **integration** channel and that the producer's example decodes into the struct this service reads, with every field it acts on present; `TestOnIntegrationChannelRejectsAnalyticsOnlyTypes` proves the detector can fail. The CI job `pinned-contracts` (`scripts/harness/pinned_contract_gate.py`) fails when the pinned copy differs from the producer's `develop` ([ADR 0006](/docs/adr/0006-yard-contract-pinned)). The dock-scheduling contract is **not** pinned the same way: its payload is mirrored by hand in `internal/adapters/inbound/kafka/dock_yard_consumers.go`.
+`contracts/yard-management.asyncapi.yaml` is a copy of yard-management's `apis/asyncapi.yaml` on `develop`, listed in `contracts/pinned.json`. `TestConsumedYardTypesMatchTheProducersIntegrationContract` proves each consumed yard type (`TrailerDocked`, `DoorWorkCompleted`, `TrailerDeparted`) is declared on the producer's **integration** channel and that the producer's example decodes into the struct this service reads, with every field it acts on present; `TestOnIntegrationChannelRejectsAnalyticsOnlyTypes` proves the detector can fail. The CI job `pinned-contracts` (`scripts/harness/pinned_contract_gate.py`) fails when the pinned copy differs from the producer's `develop` ([ADR 0006](/docs/adr/0006-yard-contract-pinned)). The dock-scheduling contract is pinned the same way ([ADR 0007](/docs/adr/0007-dock-scheduling-contract-pinned)): `contracts/dock-scheduling.asyncapi.yaml` is a copy of dock-scheduling's `apis/asyncapi.yaml` on `develop` (its AsyncAPI is 2.6, a channel with `subscribe.message.oneOf`), listed in `contracts/pinned.json`, with `TestDockAppointmentBookedMatchesTheProducersIntegrationContract` and its detector `TestDockPublishedOnIntegrationIgnoresTheAnalyticsTwin`. Both pins were refreshed against the producers' `develop` in PR 18. `TestRealCptScheduleWithoutAVersionIsAccepted` covers one more real producer payload. The other three consumed producers, process-path-management (`CPTScheduleChanged`), facility-layout (`ZoneRegistered`, `LocationSlotRegistered`) and fulfillment-execution (`PackageManifested`), are **not** in `contracts/pinned.json`: their payloads are mirrored by hand in `cpt_layout_consumers.go` and `fulfillment_consumer.go` (ADR 0007 lists the first and last as follow-ups).
 
 ### Fitness tests (`internal/architecture`)
 
@@ -101,7 +101,9 @@ Triggers: push and PR on `main` and `develop`, a weekly schedule (mutation), man
 | `vuln` | `govulncheck` |
 | `chart-tests` | `charts/outbound-shipping/tests/*.sh` and `test_*.py` (`render_test.sh`, `test_service_selectors.py`; a test printing `SKIP` fails the job) |
 | `arch-test` | `go test ./internal/architecture/... -v` |
-| `docker-publish` | image build, push, signing, SBOM: only on a push to `main`, after the jobs above |
-| `release` | version, tag, chart package, GitHub release: only after `docker-publish` |
+| `docs-api-drift` | regenerates `docs/docs/api-reference/rest` from `apis/openapi.yaml` and fails when the committed files differ |
+| `trivy-scan` | pull requests only: builds the image locally (not pushed) and scans it with Trivy; blocks on CRITICAL or HIGH findings with a fix available |
+| `docker-publish` | image build, push, signing, SBOM: only on a push to `main`, after the required jobs above. Ran once, for `v0.1.0`. |
+| `release` | version, tag, chart package, GitHub release: only after `docker-publish`. Cut `v0.1.0` on 2026-11-11. |
 
-The documentation site is built by a separate workflow, `.github/workflows/docs.yml` (build on pull request, deploy on push to `main`).
+The documentation site is built by a separate workflow, `.github/workflows/docs.yml` (build on pull request, deploy on push to `main` or on manual dispatch). GitHub Pages is enabled for the repository and the site is at [iqvo.github.io/outbound-shipping](https://iqvo.github.io/outbound-shipping/). `main` is protected: its required checks are `lint`, `test`, `bdd`, `integration`, `mutation-fast`, `vuln`, `api-lint`, `arch-test` and `file-length`. The first push to `main` failed `vuln` (GO-2026-6859) until `go.mod` moved to `go 1.27.4` (PR 19).

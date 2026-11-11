@@ -7,7 +7,7 @@ description: "The ddd-crew artifact pack of outbound-shipping: core domain chart
 
 # DDD artifacts
 
-The strategic and tactical design of `outbound-shipping` follows the [ddd-crew](https://github.com/ddd-crew) tools. The pack was written from the code of this repository: every Mermaid diagram carries a `Source:` line naming the files it was drawn from. There is no hand-written design pack in the central documentation site for this context, so where a page reads the design, it reads [ADR 0001](/docs/adr/0001-outbound-shipping-bounded-context) to [ADR 0006](/docs/adr/0006-yard-contract-pinned) and the code, and where they differ the code wins and the page says so.
+The strategic and tactical design of `outbound-shipping` follows the [ddd-crew](https://github.com/ddd-crew) tools. The pack was written from the code of this repository: every Mermaid diagram carries a `Source:` line naming the files it was drawn from. There is no hand-written design pack in the central documentation site for this context, so where a page reads the design, it reads [ADR 0001](/docs/adr/0001-outbound-shipping-bounded-context) to [ADR 0007](/docs/adr/0007-dock-scheduling-contract-pinned) and the code, and where they differ the code wins and the page says so.
 
 Source: `internal/domain/`, `internal/application/`, `internal/adapters/`, `migrations/`, `apis/`, `docs/adr/`.
 

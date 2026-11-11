@@ -96,4 +96,4 @@ Load adherence (`loads_closed / loads_total` per cutoff and date), packages miss
 - Who calls `POST /missed-load-sweeps` and when: nothing in the repository schedules it.
 - Who consumes `LoadingStarted`, `LoadClosed` and `LoadReopened`: yard-management declares no handler.
 - When network-fulfillment replaces its manual shipment confirmation with `ShipmentConfirmed` ([ADR 0004](/docs/adr/0004-shipment-confirmed-replaces-the-manual-network-confirmation)).
-- Whether the dock-scheduling pin should be refreshed from its `develop` AsyncAPI ([ADR 0006](/docs/adr/0006-yard-contract-pinned)).
+- Whether the process-path-management, facility-layout and fulfillment-execution payloads should be pinned like the yard and dock-scheduling ones ([ADR 0007](/docs/adr/0007-dock-scheduling-contract-pinned) lists the first and last as follow-ups). The dock-scheduling pin itself is done and was refreshed in PR 18.

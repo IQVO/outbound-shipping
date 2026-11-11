@@ -9,7 +9,7 @@ description: "Why outbound-shipping is a Supporting subdomain in the WMS area, w
 
 **outbound-shipping is a Supporting subdomain** of the WMS area. [ADR 0001](/docs/adr/0001-outbound-shipping-bounded-context) takes the decision (`Create outbound-shipping, Supporting, subdomain wms`). Its CloudEvents types therefore start `com.warehouse.wms.outbound-shipping.` (see [ADR 0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue)).
 
-Source: ADR 0001 and ADR 0005; the aggregates in `internal/domain/outboundload`, `shippingpackage` and `billoflading`; the neighbours' rows are copied from the fleet table at [Subdomain Classification](https://iqvo.github.io/warehouse-docs/strategic-design/subdomain-classification) in warehouse-docs (`docs/strategic-design/subdomain-classification.md` on `origin/main`, read 2026-11-09). That table has **no row for outbound-shipping yet**, and none for dock-scheduling or yard-management.
+Source: ADR 0001 and ADR 0005; the aggregates in `internal/domain/outboundload`, `shippingpackage` and `billoflading`; the neighbours' rows are copied from the fleet table at [Subdomain Classification](https://iqvo.github.io/warehouse-docs/strategic-design/subdomain-classification) in warehouse-docs (`docs/strategic-design/subdomain-classification.md` on `origin/main`, read 2026-11-11). That table now has a row for outbound-shipping (Supporting, `wms`); it still has **none for dock-scheduling or yard-management**.
 
 ## Why Supporting
 

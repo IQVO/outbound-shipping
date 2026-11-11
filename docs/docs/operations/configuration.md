@@ -47,6 +47,10 @@ The code defaults of the relay package itself (`DefaultInterval` 1 s, `DefaultMa
 | `MCP_ADDR` | `:8090` | no | Listen address of the MCP server. |
 | `LOG_LEVEL` | `info` | no | Same values as `cmd/api`. |
 
+## In the cluster: the Helm chart and warehouse-infra
+
+The chart `charts/outbound-shipping/` renders each variable above from a dedicated value (the mapping is in the [runbook](/docs/operations/runbook#helm-chart)), and warehouse-infra's `helm-values/outbound-shipping.yaml` sets them for the k3s cluster: the six consumer group ids at the chart defaults, the database Secret `outbound-shipping-db` (`DATABASE_URL` and `MIGRATIONS_DATABASE_URL`), one `api` replica and the MCP server **off**. The brokers come from the platform values and the image tag from the pin in `terraform/targets/k3s.images.yaml`. None of this is applied yet: no pod reads these values (see [Deployment status](/docs/operations/runbook#deployment-status-released-v010-registered-and-pinned-not-applied)).
+
 ## What is not configurable
 
 - **No auth variables.** REST, MCP and the probes are unauthenticated; access control is the cluster network boundary.

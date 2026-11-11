@@ -15,7 +15,7 @@ Source: `Makefile`, `cmd/api/config.go`, `cmd/mcp/main.go`, `apis/openapi.yaml`,
 
 | Need | Version / note | Used for |
 |---|---|---|
-| Go | `1.27.3` (`go.mod`) | build, tests |
+| Go | `1.27.4` (`go.mod`; bumped from `1.27.3` for GO-2026-6859 in `net/http`, PR 19, which also re-pinned the Dockerfile builder image) | build, tests |
 | `golangci-lint` | `v2.14.0` (`GOLANGCI_VERSION` in the Makefile) | `make lint`, part of `make check` |
 | Docker | any recent engine | **only** `make integration` (testcontainers boots its own Postgres and Kafka per test) |
 | `gremlins` | `v0.6.0` | `make mutation`, `make mutation-full` |
@@ -118,7 +118,7 @@ curl -s -X POST http://localhost:8080/missed-load-sweeps \
   -d '{"site_id":"SITE-1"}'
 ```
 
-The service is **built on `develop`, not deployed**: the Helm chart exists in `charts/outbound-shipping/`, but there is no entry in warehouse-infra (no `apps.yaml` entry, no helm values, no pinned image), so nothing is deployed and no Kong route exists for it yet (see [Runbook](/docs/operations/runbook#helm-chart)). Until then the calls above go straight to the process.
+The service is **released as `v0.1.0` and registered in warehouse-infra (an `apps.yaml` entry, helm values and an image pin), but not applied to the cluster**: no outbound-shipping pod runs and the Kong route `/api/outbound-shipping` that the helm values declare is not rendered yet (see [Runbook](/docs/operations/runbook#deployment-status-released-v010-registered-and-pinned-not-applied)). Until an apply, the calls above go straight to a process you started yourself.
 
 ## What to read next
 

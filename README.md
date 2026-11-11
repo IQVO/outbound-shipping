@@ -11,11 +11,15 @@ endorsed by or affiliated with any company, and it uses no company's code,
 data, logos or trademarks. All names, figures and examples are illustrative or
 synthetic.
 
-Status: built on `develop`, **not deployed**. The service has its three aggregates,
+Status: **released as `v0.1.0`** (2026-11-11, from `main`; image `ghcr.io/iqvo/outbound-shipping:v0.1.0`
+and the Helm chart `outbound-shipping-0.1.0.tgz` are published), **registered and image-pinned in
+warehouse-infra (PR 205), not applied to the cluster**: no outbound-shipping pod runs, so nothing is
+deployed and no edge to another context is live. The service has its three aggregates,
 REST and read-only MCP surfaces, the Kafka consumers, the transactional outbox and
 the ship-confirm that follows the trailer's physical departure (`yard-management`
-`TrailerDeparted`, ADR 0002). The Helm chart is in `charts/outbound-shipping/` (api, optional mcp, Gateway API routes, Kong plugins), but the service is not registered in
-warehouse-infra and nothing is deployed (see the runbook and `docs/docs/operations/before-first-release.md`).
+`TrailerDeparted`, ADR 0002). The Helm chart is in `charts/outbound-shipping/` (api, optional mcp, Gateway API routes, Kong plugins).
+The open steps (topics pre-created, apply) are in the runbook and in
+`docs/docs/operations/before-first-release.md`.
 It owns `OutboundLoad`, `ShippingPackage` and `BillOfLading` (see `docs/adr/`, ADRs
 0001 to 0006). Binaries: `cmd/api` (REST, six Kafka consumers, outbox relay) and
 `cmd/mcp` (read-only MCP).

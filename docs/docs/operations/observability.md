@@ -7,9 +7,9 @@ description: "What outbound-shipping emits today: structured logs, trace-context
 
 # Observability
 
-Source: `cmd/api/main.go` (`newLogger`), `internal/adapters/inbound/kafka/*.go`, `internal/adapters/outbound/outbox/relay.go`, `internal/adapters/outbound/postgres/outbox_repository.go`, `internal/adapters/inbound/http/*.go`, `go.mod`; warehouse-infra `origin/develop` (checked 2026-11-09).
+Source: `cmd/api/main.go` (`newLogger`), `internal/adapters/inbound/kafka/*.go`, `internal/adapters/outbound/outbox/relay.go`, `internal/adapters/outbound/postgres/outbox_repository.go`, `internal/adapters/inbound/http/*.go`, `go.mod`; warehouse-infra `origin/develop` (`terraform/apps.yaml`, `scripts/gen-context-dashboards.py`, `terraform/alerting/warehouse-alert-rules.json`, `terraform/dashboards/contexts/outbound-shipping.json`, `helm-values/outbound-shipping.yaml`; checked 2026-11-11).
 
-This service is built on `develop` and not deployed (its Helm chart exists, but nothing renders it in the cluster), and its observability is thin. Read this page as the inventory of what exists, so that nobody assumes more.
+This service is released as `v0.1.0` and registered in warehouse-infra, but not applied to the cluster (no outbound-shipping pod exists), and its observability is thin. Read this page as the inventory of what exists, so that nobody assumes more.
 
 ## OpenTelemetry instruments and spans: none
 
@@ -77,6 +77,18 @@ SELECT max(updated_at) FROM load_board;
 
 ## Dashboards and alerts
 
-None exist. warehouse-infra `origin/develop` has no `outbound-shipping` entry in `terraform/apps.yaml` and no dashboard or alert rule that mentions the service. Fleet dashboards are generated per registered application, so the service gets none until it is registered (see [Before the first release](/docs/operations/before-first-release), row 13). The fleet's Kong 5xx panels would only cover it once a Kong route exists. The chart can create the routes and three `KongPlugin` objects (`cors`, `prometheus`, `opentelemetry`), all off by default; they only matter once warehouse-infra registers the service and turns them on. The chart sets no `OTEL_*`, `ENVIRONMENT` or `SERVICE_VERSION` variable, because the binaries read none.
+**Registered in warehouse-infra (PR 205), not in the cluster.** warehouse-infra generates one dashboard (`Warehouse - Outbound Shipping`, uid `warehouse-outbound-shipping`) and six alert rules for the context from `scripts/gen-context-dashboards.py`; the context entry has `service_regex: outbound-shipping.*`, `loki_app: outbound-shipping` and **empty `business_metrics`**. They go live only through warehouse-infra's platform apply, and read-only checks on 2026-11-11 show it has not carried them: the `prometheus-server` ConfigMap (`alerting_rules.yml`) holds no outbound-shipping rule and `grafana-dashboards-warehouse` holds no outbound-shipping dashboard. With no pod and no Kong route they would have nothing to read in any case.
 
-Minimum alerts to define when it is deployed: the two ERROR messages marked above, `/readyz` failing for more than a few minutes, consumer-group lag on the six groups, and the `outbox_events` backlog age.
+The service registers **no OTel instrument and no `/metrics` endpoint** (see the first section: no meter, no span, no `otelhttp`, no SDK, no Prometheus handler), so most of the generated dashboard stays empty. What is meaningful:
+
+| Dashboard row or alert | Source | Meaningful? |
+|---|---|---|
+| Kong rows: request rate, 5xx rate, latency p95 | Kong's own `kong_http_requests_total` and `kong_upstream_latency_ms` for the route, from `kongPlugins.prometheus` in the helm values | Yes, once the route `/api/outbound-shipping` exists and receives traffic. |
+| Alerts `WarehouseKong5xxRatioHigh`, `WarehouseApiAvailabilityBurnFast` and `...Slow`, `WarehouseApiLatencyBurnFast` and `...Slow` | the same Kong series, for the services `outbound-shipping`, `outbound-shipping-mcp` and `outbound-shipping-reports` routes | Yes, once Kong carries traffic; the burn alerts also need at least 30 requests in their window. They say nothing about the six consumers or the relay. |
+| Alert `WarehousePodRestarting` | `kube_pod_container_status_restarts_total` for pods named `outbound-shipping-*` | Yes, once a pod exists. It would catch boot-retry exhaustion, a failed migration, a consumer that exits on purpose and an OOM kill. |
+| Logs rows: live stream, volume by level, errors and warnings | Loki, label `app=outbound-shipping`, fed by the JSON logs above | Yes, once a pod exists. |
+| "Service HTTP RED" rows (request rate by route, request duration p95 by process) and "Go runtime" rows (goroutines, memory) | metrics the service does not emit | **No: empty.** The generator's own comment says these stay empty until the service instruments itself. |
+
+The Kong rows and alerts are fed only through the API route; the MCP route, when the MCP server is switched on, is `outbound-shipping-mcp`. The helm values enable the `cors`, `prometheus` and `opentelemetry` Kong plugins and leave the MCP server off. The chart sets no `OTEL_*`, `ENVIRONMENT` or `SERVICE_VERSION` variable, because the binaries read none.
+
+Not covered by any rule in warehouse-infra, and still to define once the service runs: the two ERROR messages marked above (`outbox relay: row reached the attempt cap...` and `kafka consumer stopped`), `/readyz` failing for more than a few minutes, consumer-group lag on the six groups, and the `outbox_events` backlog age. The SQL signals above stand in for them.

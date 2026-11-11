@@ -43,7 +43,7 @@ internal/
   testing/               pgtest, kafkatest (testcontainers helpers)
 migrations/              embedded SQL (one migration pair)
 apis/                    openapi.yaml, asyncapi.yaml
-contracts/               pinned yard-management AsyncAPI
+contracts/               pinned yard-management and dock-scheduling AsyncAPI
 features/                godog scenarios and runner
 ```
 

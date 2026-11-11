@@ -28,7 +28,7 @@ quadrantChart
 
 Source: `internal/domain/outboundload/load.go`, `internal/domain/outboundload/commands.go`, `internal/domain/shippingpackage/commands.go`, `internal/domain/billoflading/bol.go`, `internal/application/usecases/on_departure.go`, `internal/application/usecases/expect_package.go`, `internal/application/usecases/sweep_missed.go`, `internal/application/usecases/project_board.go`.
 
-Omitted: the other contexts (their points are on their own charts; the fleet plot is the [Core Domain Chart](https://iqvo.github.io/warehouse-docs/strategic-design/core-domain-chart) in warehouse-docs, which has no point for this context yet). The five slices are this page's reading of the code, not values taken from a design model: they place relative effort and distinctiveness, not measurements. All of them stay in quadrant 3 (Supporting) or on its edge.
+Omitted: the other contexts (their points are on their own charts; the fleet plot is the [Core Domain Chart](https://iqvo.github.io/warehouse-docs/strategic-design/core-domain-chart) in warehouse-docs, where this context is plotted at the same point as above, 0.40, 0.35, read on `origin/main` on 2026-11-11). The five slices are this page's reading of the code, not values taken from a design model: they place relative effort and distinctiveness, not measurements. All of them stay in quadrant 3 (Supporting) or on its edge.
 
 ## Classification: Supporting
 

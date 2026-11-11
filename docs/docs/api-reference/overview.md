@@ -19,7 +19,7 @@ Source: `apis/openapi.yaml`, `apis/asyncapi.yaml`, `internal/adapters/inbound/ht
 | MCP | `cmd/mcp` | `MCP_ADDR`, default `:8090`, paths `/` and `/mcp` | Streamable HTTP only | Read-only: 2 tools, 1 resource, 1 prompt; see [MCP tools](/docs/mcp/tools) |
 | A2A | none | none | none | There is no `cmd/a2a`. |
 
-REST and MCP are **unauthenticated**: there is no auth middleware and a fitness test (`TestNoAuthMiddlewareReintroduced`) keeps it that way. The service is built on `develop` but not deployed, so no Kong route `/api/outbound-shipping` exists yet (see the [runbook](/docs/operations/runbook)).
+REST and MCP are **unauthenticated**: there is no auth middleware and a fitness test (`TestNoAuthMiddlewareReintroduced`) keeps it that way. The service is released as `v0.1.0` and registered in warehouse-infra, whose helm values declare the Kong route `/api/outbound-shipping`, but it is not applied to the cluster, so that route does not exist there yet (see the [runbook](/docs/operations/runbook#deployment-status-released-v010-registered-and-pinned-not-applied)).
 
 ## REST endpoints
 
