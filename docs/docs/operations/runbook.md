@@ -37,7 +37,7 @@ Values that matter (all keys of `charts/outbound-shipping/values.yaml`):
 | `kafka.brokers` | `KAFKA_BROKERS` | Required (comma-separated); `api` only. |
 | `config.fulfillmentConsumerGroup`, `dockConsumerGroup`, `yardConsumerGroup`, `cptConsumerGroup`, `layoutConsumerGroup`, `analyticsConsumerGroup` | the six `*_CONSUMER_GROUP` variables | Default to `outbound-shipping-fulfillment`, `-dock`, `-yard`, `-cpt`, `-layout`, `-analytics`. The render fails when one is empty. Do not change them on a running release: a new id replays its topic from the earliest offset. |
 | `config.addr`, `config.logLevel` | `ADDR`, `LOG_LEVEL` | Defaults `:8080` and `info`. `mcp.httpAddr` sets `MCP_ADDR` (`:8090`). |
-| `config.outboxIntervalMs`, `outboxBatch`, `outboxMaxAttempts` | `OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MAX_ATTEMPTS` | Empty by default: not rendered, the binary defaults (250 ms, 100, 10) apply. |
+| `config.outboxIntervalMs`, `outboxBatch`, `outboxMaxAttempts` | `OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MAX_ATTEMPTS` | Empty by default: not rendered, the binary defaults (250 ms, 100, 20) apply. |
 | `image.repository`, `image.tag` | none | Set by the platform (Terraform `valuesObject`); the chart default is `warehouse/outbound-shipping:local`. |
 
 The chart sets no `ENVIRONMENT`, `SERVICE_VERSION` or `OTEL_*` variable because no binary reads one (see [Observability](/docs/operations/observability)). `chart-tests` fails if the chart renders a variable the Go code does not read, or misses one it does.

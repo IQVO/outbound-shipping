@@ -115,7 +115,7 @@ deployments="$(grep -c '^kind: Deployment$' <<<"$render_all")"
 # literals in cmd/*, the groupVars table of cmd/api/config.go and the Env*
 # constants of the postgres adapter (migrations DSN). The everything-set render
 # must carry each one, and carry NO other variable (nothing invented).
-code_vars="$( { grep -rhoE --include='*.go' --exclude='*_test.go' '(Getenv|getenv|or|intOr)\("[A-Z][A-Z0-9_]+"' "$repo_dir/cmd" \
+code_vars="$( { grep -rhoE --include='*.go' --exclude='*_test.go' '(Getenv|getenv|or|intOr|intAtLeast)\("[A-Z][A-Z0-9_]+"' "$repo_dir/cmd" \
     | sed -E 's/.*\("([A-Z0-9_]+)"/\1/'
   sed -n '/^var groupVars/,/^}/p' "$repo_dir/cmd/api/config.go" | grep -oE '"[A-Z][A-Z0-9_]+_CONSUMER_GROUP"' | tr -d '"'
   grep -hoE 'Env[A-Za-z]+ += "[A-Z][A-Z0-9_]+"' "$repo_dir/internal/adapters/outbound/postgres/migrate.go" | sed -E 's/.*"([A-Z0-9_]+)"/\1/'

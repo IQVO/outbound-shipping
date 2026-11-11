@@ -108,7 +108,7 @@ config:
   # the binary default applies.
   outboxIntervalMs: ""               # OUTBOX_INTERVAL_MS: pass interval in ms (binary default 250)
   outboxBatch: ""                    # OUTBOX_BATCH: rows claimed per pass (binary default 100)
-  outboxMaxAttempts: ""              # OUTBOX_MAX_ATTEMPTS: failures before a poison row is parked (binary default 10)
+  outboxMaxAttempts: ""              # OUTBOX_MAX_ATTEMPTS: failures before a poison row is excluded from claims (binary default 20; 0 = unlimited)
   # The six Kafka consumers run INSIDE cmd/api, each under a FIXED, STABLE
   # group id that must come from values: cmd/api exits at boot without one
   # and the chart refuses to render with an empty one. A stable id lets a
