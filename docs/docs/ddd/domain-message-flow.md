@@ -46,7 +46,7 @@ flowchart LR
 
 Source: `internal/application/usecases/expect_package.go`, `book_appointment.go`, `dock_trailer.go`, `scan_package.go`, `load_commands.go`, `on_departure.go`. The self arrows are events folded by the context's own projector (analytics only). The arrows to yard-management for `LoadingStarted` and `LoadClosed` are the intended edge of [ADR 0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue); the yard has no handler for them yet.
 
-Reading: the cutoff schedule and staging locations are copied in first and passively. The first manifested package plans the load; a dock appointment gives it a door; the yard's docking starts loading. Operators scan; the supervisor closes. Only the yard's departure, never a user command, confirms the shipment.
+Reading: the cutoff schedule and staging locations are copied in first and passively. The first manifested package plans the load; a dock appointment that arrives while the load is open gives it a door (an appointment that arrived earlier does not yet, see [Troubleshooting](/docs/operations/troubleshooting#appointment-before-the-load-planned)); the yard's docking starts loading. Operators scan; the supervisor closes. Only the yard's departure, never a user command, confirms the shipment.
 
 ## 2. The departure that comes before the close
 

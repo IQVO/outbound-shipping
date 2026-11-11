@@ -73,6 +73,6 @@ Read models on the board: the cutoff schedule copy, the staging-location copy, t
 | Does the yard contract really carry the facts this service needs? | It did not (the yard published two of the three on its analytics topic only). The contract is now pinned and tested ([ADR 0006](/docs/adr/0006-yard-contract-pinned)). |
 | A diverted package blocks the close. | It is short-shipped with reason `DIVERTED` as soon as the diversion arrives, so the load can still close. |
 | Can a load with packages be cancelled? | No: cancelling would strand them on a dead load; short-ship and close instead (`ErrLoadHasPackages`). |
-| An appointment that arrives before the load exists. | Only the copy is saved; the door is assigned when a later appointment for the same cpt arrives. Still an open ordering gap (see [Troubleshooting](/docs/operations/troubleshooting)). |
+| An appointment that arrives before the load exists. | Only the copy is saved; the door is assigned only when a later appointment for the same cpt arrives while a load is open. Assigning it when the load is planned is **planned**, not implemented: no ADR fixes the rule (see [Troubleshooting](/docs/operations/troubleshooting#appointment-before-the-load-planned)). |
 | Pallets, load sequencing, master bill of lading. | Deferred (decision D4); v1 ships packages. |
 | Who triggers the sweep? | Left to an external scheduler; nothing in this repository schedules it. |

@@ -63,7 +63,7 @@ sequenceDiagram
     T->>DB: save load and outbox rows
 ```
 
-Source: `internal/application/usecases/book_appointment.go`, `internal/application/usecases/dock_trailer.go`, `internal/domain/outboundload/commands.go`. An appointment that is inbound, names no cpt, or arrives before a load of that cpt exists only updates the copy.
+Source: `internal/application/usecases/book_appointment.go`, `internal/application/usecases/dock_trailer.go`, `internal/domain/outboundload/commands.go`. An appointment that is inbound, names no cpt, or arrives before a load of that cpt exists only updates the copy; assigning the door when the load is planned later is planned, not implemented ([Troubleshooting](/docs/operations/troubleshooting#appointment-before-the-load-planned)).
 
 ## 3. Scans: stage, load, unload
 

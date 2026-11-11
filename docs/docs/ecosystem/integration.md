@@ -29,7 +29,7 @@ The payload fields each consumer reads are fixed in code (`dock_yard_consumers.g
 ### Failure behaviour that matters
 
 - **A producer that is down or silent:** nothing is planned or confirmed; there is no polling fallback and no REST call to ask. The local copies keep their last value.
-- **Ordering between topics is not guaranteed.** The design copes in these cases: schedule and layout copies may arrive in any order; a `DockAppointmentBooked` that arrives before any load of its cpt exists is saved and only assigns a door when a later appointment event for that cpt arrives; a `TrailerDeparted` that arrives before the load closes never confirms (it flags what is not loaded) and the redelivery after close does not confirm either.
+- **Ordering between topics is not guaranteed.** The design copes in these cases: schedule and layout copies may arrive in any order; a `DockAppointmentBooked` that arrives before any load of its cpt exists is saved but does **not** assign a door when the load is planned later (planned, not implemented: it only assigns when a later appointment event for that cpt arrives while a load is open, see [Troubleshooting](/docs/operations/troubleshooting#appointment-before-the-load-planned)); a `TrailerDeparted` that arrives before the load closes never confirms (it flags what is not loaded) and the redelivery after close does not confirm either.
 - **A consumed topic that does not exist yet** is retried by the reader and logged; the service stays ready.
 
 ## Downstream: who consumes what this service publishes
