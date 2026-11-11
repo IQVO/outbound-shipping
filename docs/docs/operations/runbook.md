@@ -9,12 +9,28 @@ description: "Deployment status, probes, migrations, Kafka topics and consumer g
 
 Source: `cmd/api/*.go`, `cmd/mcp/*.go`, `internal/adapters/inbound/http/readiness.go`, `internal/adapters/inbound/kafka/*.go`, `internal/adapters/outbound/outbox/relay.go`, `internal/adapters/outbound/postgres/outbox_repository.go`, `migrations/`, `Dockerfile`.
 
-## Deployment status: built on develop, not deployed
+## Deployment status: released v0.1.0, registered and pinned, not applied
 
-- **The Helm chart exists, and nothing is deployed from it.** `charts/outbound-shipping/` renders the `api` Deployment and Service and, behind flags, the `mcp` Deployment and Service, the Gateway API routes and three Kong plugins (see [Helm chart](#helm-chart)). The `chart-tests` CI job runs its two tests, and the `release` job packages it with `helm package charts/outbound-shipping --version X.Y.Z --app-version X.Y.Z`. [Before the first release](/docs/operations/before-first-release) lists the work that remains (the chart rows are closed; platform registration is not).
-- **It is not registered in warehouse-infra.** `terraform/apps.yaml` on `origin/develop` of warehouse-infra has no `outbound-shipping` entry, and no other file of that repository mentions the service (checked 2026-11-09). There is no Kong route, no Argo application, no dashboard and no alert rule for it.
-- **The image builds.** The `Dockerfile` compiles every `cmd/*` directory into `/app/<name>` (`/app/api`, `/app/mcp`), runs as UID 1000 on Alpine, `EXPOSE 8080` and `ENTRYPOINT ["./api"]`. The MCP server would run with `command: ["/app/mcp"]` and port 8090. `docker-publish` pushes to `ghcr.io/iqvo` only on a push to `main`.
-- **Consequence for operators:** nothing here runs in the k3s cluster yet: no Argo application renders the chart, there is no `helm-values` file and no pinned image for it in warehouse-infra. Everything below describes how the binaries behave and what the chart does with them.
+State checked on 2026-11-11. Nothing below is observed from a running pod, because no outbound-shipping pod exists.
+
+- **Released.** GitHub release `v0.1.0` (tag at `857edfd`, the head of `main`; release PR 20) carries the image `ghcr.io/iqvo/outbound-shipping:v0.1.0` (also tagged `latest` and `857edfd`) and the chart package `outbound-shipping-0.1.0.tgz`. `docker-publish` and `release` both succeeded on that push (CI run 43000267854). The first push to `main` had failed the required `vuln` job on GO-2026-6859 in `net/http` of Go 1.27.3; PR 19 bumped `go.mod` to `go 1.27.4` and re-pinned the Dockerfile builder digest, and nothing was published from the failed run.
+- **The Helm chart is merged and released.** `charts/outbound-shipping/` (PR 17, merged on `develop`) renders the `api` Deployment and Service and, behind flags, the `mcp` Deployment and Service, the Gateway API routes and three Kong plugins (see [Helm chart](#helm-chart)). The `chart-tests` CI job runs its two tests, and the `release` job packages it with `helm package charts/outbound-shipping --version X.Y.Z --app-version X.Y.Z`.
+- **Registered in warehouse-infra** (PR 205, merged on its `develop`): the `terraform/apps.yaml` entry (`kind: service`, `database: true`, no analytics database, no frontend remote), `helm-values/outbound-shipping.yaml`, the CPU overlay in `helm-values/kind-resources/`, a dashboard and alert rules generated for the context, the chart-selector dummy in `scripts/check-chart-selectors.py`, `docs/kafka-topics-outbound-shipping.md`, and the image pin `outbound-shipping: image: 857edfd-arm64` in `terraform/targets/k3s.images.yaml` (publish-images run 43001089814). Those are the facts of that repository's `origin/develop`; this repository does not own them.
+- **Not applied.** A read-only `kubectl get pods,deploy,application -A` on the k3s-multipass context shows no outbound-shipping pod, Deployment or Argo application. I did not check whether the database, the Kafka topics or the consumer groups exist; with no pod and no Argo application, no Kong route for the service is rendered. The dashboard and the alert rules are generated in warehouse-infra but are not in the cluster either: the `prometheus-server` ConfigMap (`alerting_rules.yml`) has no outbound-shipping rule and `grafana-dashboards-warehouse` has no outbound-shipping dashboard (see [Observability](/docs/operations/observability#dashboards-and-alerts)). They reach the cluster only through warehouse-infra's platform apply.
+- **Consequence for operators:** nothing here runs in the k3s cluster yet. Everything below describes how the binaries behave and what the chart does with them, read from the code and the chart; none of it was observed live.
+
+### What an apply needs
+
+From the helm values and the topic note in warehouse-infra, none of which has been run:
+
+1. **Pre-create the seven Kafka topics before the first sync.** `warehouse.outbound-shipping.events`, `warehouse.outbound-shipping.analytics` and the five it reads (`warehouse.fulfillment.events`, `warehouse.dock-scheduling.events`, `warehouse.yard-management.events`, `warehouse.process-path-management.events`, `warehouse.facility.events`), with the commands in warehouse-infra's `docs/kafka-topics-outbound-shipping.md` (`kafka-topics.sh --create --if-not-exists`, 8 partitions, replication factor 1). That note's reason is that a kafka-go group consumer that starts before its topic exists is never handed the partition, and the platform creates no topics itself. The service never creates a topic it consumes. The `.dlq` topics need nothing.
+2. **Pod budget.** The helm values run **one `api` replica and nothing else**: the MCP server is off (`mcp.enabled: false`, its Kong route flag stays declared) and there is no relay Deployment because the relay runs inside the `api`. The values file states that the k3s nodes were at 108 of 110 and 98 of 110 pods when it was written; that capacity was not re-measured for this page. Turning the MCP server on adds a second pod, in one values PR.
+3. **Database and secrets.** The `outbound-shipping-db` Secret holds `DATABASE_URL` (through PgBouncer) and `MIGRATIONS_DATABASE_URL` (direct); the role and database come from the platform's provisioning Job before the first sync.
+4. **Apply** with warehouse-infra's own procedure for one app (the topic note names `scripts/tf.sh app outbound-shipping apply`), after the topics exist. The image comes from the pin, not from a local build.
+
+After an apply, check `/healthz` and `/readyz`, the six consumer groups (`outbound-shipping-fulfillment`, `-dock`, `-yard`, `-cpt`, `-layout`, `-analytics`) and `kafka consumer stopped` in the log (see [Observability](/docs/operations/observability)).
+
+- **The image builds.** The `Dockerfile` compiles every `cmd/*` directory into `/app/<name>` (`/app/api`, `/app/mcp`), runs as UID 1000 on Alpine, `EXPOSE 8080` and `ENTRYPOINT ["./api"]`. The builder stage is `golang:1.27-alpine` pinned by digest (Go 1.27.4). The MCP server runs with `command: ["/app/mcp"]` and port 8090. `docker-publish` pushes to `ghcr.io/iqvo` only on a push to `main`; it has done so once, for `v0.1.0`.
 
 ## Helm chart
 
@@ -40,9 +56,11 @@ Values that matter (all keys of `charts/outbound-shipping/values.yaml`):
 | `config.outboxIntervalMs`, `outboxBatch`, `outboxMaxAttempts` | `OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MAX_ATTEMPTS` | Empty by default: not rendered, the binary defaults (250 ms, 100, 20) apply. |
 | `image.repository`, `image.tag` | none | Set by the platform (Terraform `valuesObject`); the chart default is `warehouse/outbound-shipping:local`. |
 
+**What warehouse-infra sets** (`helm-values/outbound-shipping.yaml`): `replicaCount: 1`; the six consumer groups at the chart defaults; `database.existingSecret: outbound-shipping-db` with `DATABASE_URL` and `MIGRATIONS_DATABASE_URL` keys; `gatewayApi.enabled: true` on `/api/outbound-shipping` (prefix stripped; the parent gateway comes from the platform values); `kongPlugins.cors`, `.prometheus` and `.opentelemetry` all enabled; `mcp.enabled: false` with `mcp.route.enabled: true` and path `/api/mcp/outbound-shipping`, which renders only once the MCP server is switched on; `image.repository: warehouse/outbound-shipping`, with the tag taken from the pin in `terraform/targets/k3s.images.yaml`. The brokers, CORS origin and OTLP endpoint come from the platform values. `extraEnv` is empty. Its header comment still says the image is not pinned; the pin is in `k3s.images.yaml` on the same branch.
+
 The chart sets no `ENVIRONMENT`, `SERVICE_VERSION` or `OTEL_*` variable because no binary reads one (see [Observability](/docs/operations/observability)). `chart-tests` fails if the chart renders a variable the Go code does not read, or misses one it does.
 
-**How migrations run.** There is no migration Job. `cmd/api` and `cmd/mcp` both run the embedded `golang-migrate` migrations on every start (idempotent, advisory-locked). With a pooler in front of Postgres put a direct DSN under `MIGRATIONS_DATABASE_URL` in the Secret. Whether a pod can reach and migrate a real database is **not verified**: nothing has been deployed.
+**How migrations run.** There is no migration Job. `cmd/api` and `cmd/mcp` both run the embedded `golang-migrate` migrations on every start (idempotent, advisory-locked). With a pooler in front of Postgres put a direct DSN under `MIGRATIONS_DATABASE_URL` in the Secret. Whether a pod can reach and migrate a real database in the cluster is **not verified**: nothing has been applied.
 
 Local checks (no cluster needed): `helm lint charts/outbound-shipping -f charts/outbound-shipping/ci/default-values.yaml` (and `ci/all-components-values.yaml`), `bash charts/outbound-shipping/tests/render_test.sh` and `python3 charts/outbound-shipping/tests/test_service_selectors.py`.
 
@@ -79,7 +97,7 @@ Readiness does **not** wait for the consumers to have joined their groups or for
 
 ## Kafka
 
-One broker platform-wide. The service never creates topics it consumes; it relies on the broker's auto-creation for topics it writes (`AllowAutoTopicCreation` on the writers).
+One broker platform-wide. The service never creates topics it consumes; it relies on the broker's auto-creation for topics it writes (`AllowAutoTopicCreation` on the writers). warehouse-infra asks for all seven topics to be pre-created before the first sync (see [What an apply needs](#what-an-apply-needs)).
 
 | Direction | Topic | Group variable | Types |
 |---|---|---|---|
@@ -94,7 +112,7 @@ One broker platform-wide. The service never creates topics it consumes; it relie
 
 Consumer semantics (`internal/adapters/inbound/kafka`): one message at a time; handled inside one database transaction that also claims the CloudEvents id in `processed_events`; the offset is committed only after success; no `CommitInterval` (synchronous commit). A transient failure retries the same message with backoff 200 ms doubling to 5 s, at most **5 attempts**, and is then dead-lettered. A fresh group starts at the first offset.
 
-Group ids must be stable and chosen by the deployer; there is no default. Changing a group id replays the whole topic: that is safe (the inbox dedupes) but slow, and a replayed `TrailerDeparted` for a load that already confirmed is ignored.
+Group ids must be stable and chosen by the deployer; the binary has no default (the chart and the warehouse-infra values set the six names above). Changing a group id replays the whole topic: that is safe (the inbox dedupes) but slow, and a replayed `TrailerDeparted` for a load that already confirmed is ignored.
 
 ## Outbox relay
 

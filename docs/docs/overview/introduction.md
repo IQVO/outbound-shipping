@@ -7,7 +7,7 @@ description: "What outbound-shipping owns and does not own, its place in the war
 
 # Introduction
 
-`outbound-shipping` is the bounded context that gets every manifested package onto the right load before its cutoff, proves what left on which trailer, and tells the fleet that an order has actually shipped. It is a **Supporting** subdomain in the **WMS** area of the warehouse fleet ([classification](/docs/ddd/subdomain-classification), [ADR 0001](/docs/adr/0001-outbound-shipping-bounded-context)). It is built on `develop` and **not deployed**: its Helm chart exists in `charts/outbound-shipping/` but there is no warehouse-infra registration yet (see the [runbook](/docs/operations/runbook)).
+`outbound-shipping` is the bounded context that gets every manifested package onto the right load before its cutoff, proves what left on which trailer, and tells the fleet that an order has actually shipped. It is a **Supporting** subdomain in the **WMS** area of the warehouse fleet ([classification](/docs/ddd/subdomain-classification), [ADR 0001](/docs/adr/0001-outbound-shipping-bounded-context)). It is **released as `v0.1.0`** (2026-11-11) and **registered and image-pinned in warehouse-infra** (PR 205), but **not applied to the cluster**: no outbound-shipping pod runs, so nothing is deployed and no edge to another context is live (see the [runbook](/docs/operations/runbook#deployment-status-released-v010-registered-and-pinned-not-applied) and [Integration](/docs/ecosystem/integration#edge-status-in-the-cluster)).
 
 Source: `docs/adr/0001` to `0006`, `internal/domain/*`, `internal/application/usecases/*`, `cmd/`, `apis/`.
 
