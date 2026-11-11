@@ -11,7 +11,7 @@ Two binaries ship from this repository: `cmd/api` (REST, the six Kafka consumers
 
 Source: `cmd/api/config.go` (`loadConfig`, `groupVars`), `cmd/api/main.go`, `cmd/mcp/main.go`, `internal/adapters/outbound/postgres/migrate.go` (`MigrationsURL`).
 
-Integer variables of `cmd/api` (`OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MAX_ATTEMPTS`) are read with the same rule: a value that is not a positive integer is **silently replaced by the default** (no warning is logged). `0` and negative values therefore mean the default, not "unlimited".
+Integer variables of `cmd/api` are read with one rule: a value that is not a number, or is below the variable's minimum, is **silently replaced by the default** (no warning is logged). The minimum is 1 for `OUTBOX_INTERVAL_MS` and `OUTBOX_BATCH` (so `0` and negative values mean the default there) and 0 for `OUTBOX_MAX_ATTEMPTS`, where an explicit `0` means **unlimited** (fleet convention) and only negative or non-numeric values fall back to the default.
 
 ## cmd/api (REST API, six Kafka consumers, outbox relay)
 
@@ -30,11 +30,11 @@ Integer variables of `cmd/api` (`OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MA
 | `LOG_LEVEL` | `info` | no | `debug`, `info`, `warn` (or `warning`), `error`; any other value is `info`. Case-sensitive (lower case). |
 | `OUTBOX_INTERVAL_MS` | `250` | no | Milliseconds the relay sleeps after a pass that did not fill a batch. |
 | `OUTBOX_BATCH` | `100` | no | Outbox rows claimed per relay pass. |
-| `OUTBOX_MAX_ATTEMPTS` | `10` | no | Failed sends after which a row is excluded from future claims (see the [runbook](/docs/operations/runbook)). |
+| `OUTBOX_MAX_ATTEMPTS` | `20` | no | Failed sends after which a row is excluded from future claims (see the [runbook](/docs/operations/runbook)). `0` = unlimited (the row is retried forever); negative or non-numeric = `20`. |
 
 The consumer groups are deliberately plain environment variables with no default: they must be stable across restarts and prefixed with the service name (for example `outbound-shipping-yard`); a group id derived from the pod name would replay each topic on every restart. `internal/architecture`'s `TestKafkaConsumerGroupNeverHardcodedInline` fails the build if a group id is written as a literal in a consumer.
 
-The code defaults of the relay package itself (`DefaultInterval` 1 s, `DefaultMaxAttempts` 20) are not what `cmd/api` runs with: `cmd/api` always passes its own values (250 ms, 100, 10).
+The code defaults of the relay package itself (`DefaultInterval` 1 s, `DefaultMaxAttempts` 20) are not what `cmd/api` runs with for the interval and batch: `cmd/api` always passes its own values (250 ms, batch 100) and takes the attempt cap from `OUTBOX_MAX_ATTEMPTS`, whose default is the relay package's `DefaultMaxAttempts` (20).
 
 ## cmd/mcp (MCP server, Streamable HTTP)
 

@@ -73,7 +73,7 @@ Every event is written to `outbox_events` in the same transaction as the aggrega
 - passes every `OUTBOX_INTERVAL_MS` (250) when a pass did not fill a batch, `OUTBOX_BATCH` (100) rows per pass, ordered by `id`, claimed `FOR UPDATE SKIP LOCKED`;
 - the Kafka writer uses `RequireAll` acks and a hash balancer on the key (the aggregate id), so all events of one load, package or bill of lading stay ordered on one partition;
 - a successful send sets `published_at`; a failed one increments `attempts` and stores `last_error`;
-- after `OUTBOX_MAX_ATTEMPTS` (10) failures a row is excluded from future claims, one ERROR is logged (`outbox relay: row reached the attempt cap and is excluded from future claims; re-arm it with attempts = 0 after fixing the cause`, with `id`, `topic`, `type`, `key`, `attempts`), and later rows keep flowing.
+- after `OUTBOX_MAX_ATTEMPTS` (default 20; `0` = unlimited, the row is then retried forever) failures a row is excluded from future claims, one ERROR is logged (`outbox relay: row reached the attempt cap and is excluded from future claims; re-arm it with attempts = 0 after fixing the cause`, with `id`, `topic`, `type`, `key`, `attempts`), and later rows keep flowing.
 
 Delivery is at-least-once: a crash between a successful send and the `UPDATE` re-sends the row with the same CloudEvents `id`, so consumers must dedupe on `id`.
 
@@ -83,10 +83,10 @@ Inspect the backlog and the parked rows:
 -- unpublished rows and how old the oldest is
 SELECT count(*), min(created_at) FROM outbox_events WHERE published_at IS NULL;
 
--- parked rows (cap reached)
+-- parked rows (cap reached); replace 20 with your OUTBOX_MAX_ATTEMPTS
 SELECT id, topic, event_type, subject, attempts, last_error
 FROM outbox_events
-WHERE published_at IS NULL AND attempts >= 10
+WHERE published_at IS NULL AND attempts >= 20
 ORDER BY id;
 ```
 

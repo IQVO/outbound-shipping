@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	outboxrelay "github.com/claudioed/outbound-shipping/internal/adapters/outbound/outbox"
 )
 
 // config is the api binary's environment.
@@ -17,8 +19,9 @@ type config struct {
 	Addr        string
 	LogLevel    string
 
-	OutboxInterval   time.Duration
-	OutboxBatch      int
+	OutboxInterval time.Duration
+	OutboxBatch    int
+	// OutboxMaxAttempt is the relay's attempt cap: 0 means unlimited.
 	OutboxMaxAttempt int
 }
 
@@ -41,14 +44,17 @@ func loadConfig(getenv func(string) string) (config, error) {
 		}
 		return fallback
 	}
-	intOr := func(key string, fallback int) int {
+	// intAtLeast reads an integer variable; a value that is unset, not a
+	// number or below min is replaced by the fallback.
+	intAtLeast := func(key string, fallback, min int) int {
 		if v := getenv(key); v != "" {
-			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			if n, err := strconv.Atoi(v); err == nil && n >= min {
 				return n
 			}
 		}
 		return fallback
 	}
+	intOr := func(key string, fallback int) int { return intAtLeast(key, fallback, 1) }
 
 	var problems []error
 	c := config{
@@ -57,7 +63,7 @@ func loadConfig(getenv func(string) string) (config, error) {
 		LogLevel:         or("LOG_LEVEL", "info"),
 		OutboxInterval:   time.Duration(intOr("OUTBOX_INTERVAL_MS", 250)) * time.Millisecond,
 		OutboxBatch:      intOr("OUTBOX_BATCH", 100),
-		OutboxMaxAttempt: intOr("OUTBOX_MAX_ATTEMPTS", 10),
+		OutboxMaxAttempt: intAtLeast("OUTBOX_MAX_ATTEMPTS", outboxrelay.DefaultMaxAttempts, 0),
 	}
 	if c.DatabaseURL == "" {
 		problems = append(problems, errors.New("DATABASE_URL is required: the service persists to Postgres only (no in-memory mode)"))
