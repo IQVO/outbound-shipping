@@ -21,7 +21,10 @@
 //	LOG_LEVEL                     debug | info | warn (or warning) | error (default info)
 //	OUTBOX_INTERVAL_MS            relay pass interval (default 250)
 //	OUTBOX_BATCH                  relay batch size (default 100)
-//	OUTBOX_MAX_ATTEMPTS           attempts before a poison row is parked (default 10)
+//	OUTBOX_MAX_ATTEMPTS           failed sends after which the relay excludes a row from
+//	                              future claims, logs one ERROR and lets later rows flow;
+//	                              re-arm with attempts = 0 (default 20; 0 = unlimited;
+//	                              negative or non-numeric = default)
 package main
 
 import (
