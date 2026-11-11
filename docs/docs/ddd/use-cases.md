@@ -123,7 +123,7 @@ DropDiverted. An `EXPECTED` or `STAGED` package becomes `SHORT_SHIPPED` with rea
 ### BookAppointment: `DockAppointmentBooked`
 
 DoorFromAppointment. Always saves the appointment to the local copy. For an `OUTBOUND` appointment naming a `cpt_id`, assigns the door of that appointment to the first open load of `(site, cpt)` (`AssignDoor`, allowed while `PLANNED` or `LOADING`; a later appointment re-assigns).
-- **Ignored (copy still saved) when:** the appointment is inbound, names no cpt, or no open load of that cpt exists yet.
+- **Ignored (copy still saved) when:** the appointment is inbound, names no cpt, or no open load of that cpt exists yet (planned, not implemented: assigning the door from the saved copy when the load is planned later; see [Troubleshooting](/docs/operations/troubleshooting#appointment-before-the-load-planned)).
 - **Raises:** `LoadDoorAssigned`.
 
 ### DockTrailer: `TrailerDocked`

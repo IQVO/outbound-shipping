@@ -47,6 +47,8 @@ Input:
 
 Output: `{"rows": [...]}` where each row has `package_id`, `load_id`, `site_id`, optional `source_order_id`, `state`.
 
+`internal/adapters/inbound/mcp/governance_test.go` pins the read-only surface against the real `tools/list`: the tool set is exactly these two tools, no tool name carries a write verb, and every tool is read-only, idempotent, closed-world and L1. Adding a tool means changing that pin deliberately.
+
 Optional inputs carry `omitempty`, so `tools/list` does not publish them as required (`TestMCPOptionalToolInputsCarryOmitempty`).
 
 ## Resource

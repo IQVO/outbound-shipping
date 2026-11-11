@@ -64,8 +64,8 @@ These queries stand in for the metrics that do not exist (run them against the O
 SELECT count(*) AS backlog, now() - min(created_at) AS oldest
 FROM outbox_events WHERE published_at IS NULL;
 
--- parked rows: the relay gave up on these
-SELECT count(*) FROM outbox_events WHERE published_at IS NULL AND attempts >= 10;
+-- parked rows: the relay gave up on these (20 = default OUTBOX_MAX_ATTEMPTS; none exist when it is 0)
+SELECT count(*) FROM outbox_events WHERE published_at IS NULL AND attempts >= 20;
 
 -- inbox volume per consumer, last hour
 SELECT consumer, count(*) FROM processed_events

@@ -49,6 +49,7 @@ All six are in `features/ship_confirm_on_departure.feature`: manifest, stage, lo
 | `TestOutboxRelaysPassAttemptCap` (+ two sensor tests) | the relay is built with `WithMaxAttempts`. |
 | `TestMCPOptionalToolInputsCarryOmitempty` (+ sensor test) | optional MCP inputs are not published as required. |
 | `TestEveryMCPToolDeclaresAuthority`, `TestMCPWriteToolsAreAtLeastL3`, `TestA2ASkillsDeclareAuthority`, `TestMCPServerOffersResourceAndPrompt` (+ five sensor tests) | agent surface rules: every MCP tool declares an authority level, write tools are L3 or above, the server offers a resource and a prompt. |
+| `TestGovernance_ToolSetIsPinnedAndHasNoWriteVerb`, `TestGovernance_EveryToolIsReadOnlyIdempotentClosedWorldL1` (+ `TestGovernance_WriteVerbDetectorBites`), in `internal/adapters/inbound/mcp/governance_test.go` (a unit test of the adapter, not of `internal/architecture`) | the real `tools/list` is exactly `loads_at_risk` and `missed_loads`, no tool name carries a write verb, and each tool is read-only, idempotent, closed-world, non-destructive and authority L1. |
 | `TestKafkaIntegrationTestsUseTestcontainers`, `TestPostgresIntegrationTestsUseTestcontainers` (+ sensor test) | integration tests boot their own containers and never read `DATABASE_URL`. |
 
 ### Mutation testing
