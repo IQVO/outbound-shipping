@@ -1,0 +1,44 @@
+# Used by `helm lint` / `ct lint`: every optional component enabled at once
+# (the chart render test's everything-set case mirrors this).
+database:
+  existingSecret: "outbound-shipping-db"
+config:
+  addr: ":8080"
+  logLevel: "info"
+  outboxIntervalMs: "500"
+  outboxBatch: "50"
+  outboxMaxAttempts: "10"
+  preStopSleepSeconds: 5
+  fulfillmentConsumerGroup: "outbound-shipping-fulfillment"
+  dockConsumerGroup: "outbound-shipping-dock"
+  yardConsumerGroup: "outbound-shipping-yard"
+  cptConsumerGroup: "outbound-shipping-cpt"
+  layoutConsumerGroup: "outbound-shipping-layout"
+  analyticsConsumerGroup: "outbound-shipping-analytics"
+kafka:
+  brokers: "kafka.warehouse-systems.svc.cluster.local:9092"
+gatewayApi:
+  enabled: true
+  parentRefs:
+    - name: warehouse-gateway
+      namespace: kong
+      sectionName: http
+  hosts:
+    - path: /api/outbound-shipping
+      pathType: PathPrefix
+kongPlugins:
+  cors:
+    enabled: true
+    origin: "http://localhost"
+  prometheus:
+    enabled: true
+  opentelemetry:
+    enabled: true
+mcp:
+  enabled: true
+  route:
+    enabled: true
+    parentRefs:
+      - name: warehouse-gateway
+        namespace: kong
+        sectionName: http

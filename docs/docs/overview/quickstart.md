@@ -118,7 +118,7 @@ curl -s -X POST http://localhost:8080/missed-load-sweeps \
   -d '{"site_id":"SITE-1"}'
 ```
 
-The service is **built on `develop`, not deployed**: there is no Helm chart and no entry in warehouse-infra, so no Kong route exists for it yet (see [Runbook](/docs/operations/runbook)). Until then the calls above go straight to the process.
+The service is **built on `develop`, not deployed**: the Helm chart exists in `charts/outbound-shipping/`, but there is no entry in warehouse-infra (no `apps.yaml` entry, no helm values, no pinned image), so nothing is deployed and no Kong route exists for it yet (see [Runbook](/docs/operations/runbook#helm-chart)). Until then the calls above go straight to the process.
 
 ## What to read next
 

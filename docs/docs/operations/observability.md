@@ -9,7 +9,7 @@ description: "What outbound-shipping emits today: structured logs, trace-context
 
 Source: `cmd/api/main.go` (`newLogger`), `internal/adapters/inbound/kafka/*.go`, `internal/adapters/outbound/outbox/relay.go`, `internal/adapters/outbound/postgres/outbox_repository.go`, `internal/adapters/inbound/http/*.go`, `go.mod`; warehouse-infra `origin/develop` (checked 2026-11-09).
 
-This service is built on `develop` and not deployed, and its observability is thin. Read this page as the inventory of what exists, so that nobody assumes more.
+This service is built on `develop` and not deployed (its Helm chart exists, but nothing renders it in the cluster), and its observability is thin. Read this page as the inventory of what exists, so that nobody assumes more.
 
 ## OpenTelemetry instruments and spans: none
 
@@ -77,6 +77,6 @@ SELECT max(updated_at) FROM load_board;
 
 ## Dashboards and alerts
 
-None exist. warehouse-infra `origin/develop` has no `outbound-shipping` entry in `terraform/apps.yaml` and no dashboard or alert rule that mentions the service. Fleet dashboards are generated per registered application, so the service gets none until it is registered (see [Before the first release](/docs/operations/before-first-release), row 13). The fleet's Kong 5xx panels would only cover it once a Kong route exists.
+None exist. warehouse-infra `origin/develop` has no `outbound-shipping` entry in `terraform/apps.yaml` and no dashboard or alert rule that mentions the service. Fleet dashboards are generated per registered application, so the service gets none until it is registered (see [Before the first release](/docs/operations/before-first-release), row 13). The fleet's Kong 5xx panels would only cover it once a Kong route exists. The chart can create the routes and three `KongPlugin` objects (`cors`, `prometheus`, `opentelemetry`), all off by default; they only matter once warehouse-infra registers the service and turns them on. The chart sets no `OTEL_*`, `ENVIRONMENT` or `SERVICE_VERSION` variable, because the binaries read none.
 
 Minimum alerts to define when it is deployed: the two ERROR messages marked above, `/readyz` failing for more than a few minutes, consumer-group lag on the six groups, and the `outbox_events` backlog age.

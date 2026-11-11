@@ -14,8 +14,8 @@ synthetic.
 Status: built on `develop`, **not deployed**. The service has its three aggregates,
 REST and read-only MCP surfaces, the Kafka consumers, the transactional outbox and
 the ship-confirm that follows the trailer's physical departure (`yard-management`
-`TrailerDeparted`, ADR 0002). There is no Helm chart yet and it is not registered in
-warehouse-infra (see the runbook and `docs/docs/operations/before-first-release.md`).
+`TrailerDeparted`, ADR 0002). The Helm chart is in `charts/outbound-shipping/` (api, optional mcp, Gateway API routes, Kong plugins), but the service is not registered in
+warehouse-infra and nothing is deployed (see the runbook and `docs/docs/operations/before-first-release.md`).
 It owns `OutboundLoad`, `ShippingPackage` and `BillOfLading` (see `docs/adr/`, ADRs
 0001 to 0006). Binaries: `cmd/api` (REST, six Kafka consumers, outbox relay) and
 `cmd/mcp` (read-only MCP).

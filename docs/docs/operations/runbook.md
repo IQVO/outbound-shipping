@@ -11,10 +11,40 @@ Source: `cmd/api/*.go`, `cmd/mcp/*.go`, `internal/adapters/inbound/http/readines
 
 ## Deployment status: built on develop, not deployed
 
-- **There is no Helm chart.** `charts/` does not exist in this repository, so the `chart-tests` CI job has nothing to run (it only warns when no chart tests exist) and the `release` job has no chart to package. [Before the first release](/docs/operations/before-first-release) lists the work that remains (rows 5 to 9 are the chart).
+- **The Helm chart exists, and nothing is deployed from it.** `charts/outbound-shipping/` renders the `api` Deployment and Service and, behind flags, the `mcp` Deployment and Service, the Gateway API routes and three Kong plugins (see [Helm chart](#helm-chart)). The `chart-tests` CI job runs its two tests, and the `release` job packages it with `helm package charts/outbound-shipping --version X.Y.Z --app-version X.Y.Z`. [Before the first release](/docs/operations/before-first-release) lists the work that remains (the chart rows are closed; platform registration is not).
 - **It is not registered in warehouse-infra.** `terraform/apps.yaml` on `origin/develop` of warehouse-infra has no `outbound-shipping` entry, and no other file of that repository mentions the service (checked 2026-11-09). There is no Kong route, no Argo application, no dashboard and no alert rule for it.
 - **The image builds.** The `Dockerfile` compiles every `cmd/*` directory into `/app/<name>` (`/app/api`, `/app/mcp`), runs as UID 1000 on Alpine, `EXPOSE 8080` and `ENTRYPOINT ["./api"]`. The MCP server would run with `command: ["/app/mcp"]` and port 8090. `docker-publish` pushes to `ghcr.io/iqvo` only on a push to `main`.
-- **Consequence for operators:** nothing here runs in the k3s cluster yet. Everything below describes how the binaries behave, so that the chart can be written to match it.
+- **Consequence for operators:** nothing here runs in the k3s cluster yet: no Argo application renders the chart, there is no `helm-values` file and no pinned image for it in warehouse-infra. Everything below describes how the binaries behave and what the chart does with them.
+
+## Helm chart
+
+`charts/outbound-shipping/` is modelled on the sibling charts (dock-scheduling, returns-processing) and renders only what this service has. There is no analytics projector or reports Deployment, no sweep CronJob, no A2A server, no frontend and no separate relay Deployment: the relay and the projector's consumer run inside `cmd/api`.
+
+| Component | Rendered | What |
+|---|---|---|
+| `api` | always | `Deployment` (runs the image `ENTRYPOINT ./api`, probes `/healthz` and `/readyz`), `Service` `ClusterIP` port 80 to 8080, `ConfigMap` mounted with `envFrom`, `ServiceAccount`, and a `Secret` only when `database.url` is set. |
+| `mcp` | `mcp.enabled` (default `false`) | `Deployment` (`command: ["/app/mcp"]`, `MCP_ADDR` `:8090`, all probes `/healthz`: `cmd/mcp` has no `/readyz`) and `Service` on port 8090. It reads no Kafka variable. |
+| api route | `gatewayApi.enabled` (default `false`) | `HTTPRoute` `/api/outbound-shipping`, prefix stripped to `/`. |
+| mcp route | `mcp.route.enabled` (default `false`, needs `mcp.enabled`) | `HTTPRoute` `/api/mcp/outbound-shipping`, prefix rewritten to `/mcp`. |
+| Kong plugins | `kongPlugins.cors`, `.prometheus`, `.opentelemetry` (each default `false`) | `KongPlugin` objects attached to the routes. There is **no auth plugin**: the fleet is unauthenticated. |
+
+Values that matter (all keys of `charts/outbound-shipping/values.yaml`):
+
+| Value | Env var | Notes |
+|---|---|---|
+| `database.url` or `database.existingSecret` (key `database.existingSecretKey`, default `DATABASE_URL`) | `DATABASE_URL` | Required; the render fails without one. Always a `secretKeyRef`, never in the ConfigMap. |
+| `database.migrationsExistingSecretKey` (default `MIGRATIONS_DATABASE_URL`) | `MIGRATIONS_DATABASE_URL` | Optional `secretKeyRef` into the same Secret; the binaries fall back to `DATABASE_URL`. |
+| `kafka.brokers` | `KAFKA_BROKERS` | Required (comma-separated); `api` only. |
+| `config.fulfillmentConsumerGroup`, `dockConsumerGroup`, `yardConsumerGroup`, `cptConsumerGroup`, `layoutConsumerGroup`, `analyticsConsumerGroup` | the six `*_CONSUMER_GROUP` variables | Default to `outbound-shipping-fulfillment`, `-dock`, `-yard`, `-cpt`, `-layout`, `-analytics`. The render fails when one is empty. Do not change them on a running release: a new id replays its topic from the earliest offset. |
+| `config.addr`, `config.logLevel` | `ADDR`, `LOG_LEVEL` | Defaults `:8080` and `info`. `mcp.httpAddr` sets `MCP_ADDR` (`:8090`). |
+| `config.outboxIntervalMs`, `outboxBatch`, `outboxMaxAttempts` | `OUTBOX_INTERVAL_MS`, `OUTBOX_BATCH`, `OUTBOX_MAX_ATTEMPTS` | Empty by default: not rendered, the binary defaults (250 ms, 100, 20) apply. |
+| `image.repository`, `image.tag` | none | Set by the platform (Terraform `valuesObject`); the chart default is `warehouse/outbound-shipping:local`. |
+
+The chart sets no `ENVIRONMENT`, `SERVICE_VERSION` or `OTEL_*` variable because no binary reads one (see [Observability](/docs/operations/observability)). `chart-tests` fails if the chart renders a variable the Go code does not read, or misses one it does.
+
+**How migrations run.** There is no migration Job. `cmd/api` and `cmd/mcp` both run the embedded `golang-migrate` migrations on every start (idempotent, advisory-locked). With a pooler in front of Postgres put a direct DSN under `MIGRATIONS_DATABASE_URL` in the Secret. Whether a pod can reach and migrate a real database is **not verified**: nothing has been deployed.
+
+Local checks (no cluster needed): `helm lint charts/outbound-shipping -f charts/outbound-shipping/ci/default-values.yaml` (and `ci/all-components-values.yaml`), `bash charts/outbound-shipping/tests/render_test.sh` and `python3 charts/outbound-shipping/tests/test_service_selectors.py`.
 
 ## Processes
 
@@ -112,7 +142,7 @@ There is no replay tool. To replay a dead-lettered message after fixing the caus
 
 ## Shutdown
 
-On `SIGTERM`/`SIGINT` `cmd/api`: flips `/readyz` to not ready first, stops the six consumers, then the relay, waits for each loop and closes the readers, drains HTTP for up to 10 s, then closes the relay writer and the Postgres pool. There is no drain delay between the readiness flip and the listener close, so a chart should set a `preStop` sleep and a `terminationGracePeriodSeconds` above 10 s plus the longest consumer handler.
+On `SIGTERM`/`SIGINT` `cmd/api`: flips `/readyz` to not ready first, stops the six consumers, then the relay, waits for each loop and closes the readers, drains HTTP for up to 10 s, then closes the relay writer and the Postgres pool. There is no drain delay between the readiness flip and the listener close, so the chart sets a `preStop` sleep (`config.preStopSleepSeconds`, default 5 s) and `terminationGracePeriodSeconds: 45`; it refuses to render a grace period below the sleep plus 20 s (10 s of HTTP drain and 10 s for a consumer handler).
 
 A consumer loop that dies on its own (a reader error) is logged as `kafka consumer stopped` and does **not** stop the process: `/healthz` and `/readyz` keep answering 200 and that topic stops being consumed until the pod restarts. Alert on that log line and on consumer lag.
 

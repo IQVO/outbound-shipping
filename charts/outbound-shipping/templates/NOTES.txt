@@ -1,0 +1,31 @@
+{{ .Chart.Name }} has been deployed.
+
+Release:   {{ .Release.Name }}
+Namespace: {{ .Release.Namespace }}
+
+Service:   {{ include "outbound-shipping.fullname" . }} ({{ .Values.service.type }}, port {{ .Values.service.port }})
+
+{{- if .Values.gatewayApi.enabled }}
+Gateway API HTTPRoute enabled: routed via the parentRefs/hosts configured
+in gatewayApi.* (prefix stripped before cmd/api).
+{{- else }}
+To reach it locally:
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "outbound-shipping.fullname" . }} 8080:{{ .Values.service.port }}
+  curl http://localhost:8080/healthz
+{{- end }}
+
+{{- if .Values.mcp.enabled }}
+
+MCP server (Streamable HTTP, read-only, no auth):
+  http://{{ include "outbound-shipping.mcpFullname" . }}.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.mcp.service.port }}/mcp
+{{- end }}
+
+Runtime: real Postgres and real Kafka only. cmd/api (and cmd/mcp) apply the
+embedded migrations on every start; there is no migration Job.
+
+Load, Package and BillOfLading facts are relayed from the transactional outbox
+onto warehouse.outbound-shipping.events and warehouse.outbound-shipping.analytics
+({{ .Values.kafka.brokers }}). The six consumers use the groups
+{{ .Values.config.fulfillmentConsumerGroup }}, {{ .Values.config.dockConsumerGroup }}, {{ .Values.config.yardConsumerGroup }}, {{ .Values.config.cptConsumerGroup }}, {{ .Values.config.layoutConsumerGroup }}
+and {{ .Values.config.analyticsConsumerGroup }}. /readyz is 200 only while Postgres answers a ping
+and the first Kafka broker accepts a TCP connection.
