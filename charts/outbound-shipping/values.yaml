@@ -1,0 +1,254 @@
+# Default values for outbound-shipping.
+#
+# Components this chart renders (and ONLY these; the service has no analytics
+# projector/reports binary, no sweep binary, no A2A server, no frontend and no
+# separate relay):
+#   api  cmd/api, always rendered: REST on ADDR (default :8080), the outbox
+#        relay and the six Kafka consumers, all in ONE process. /app/api is
+#        the image ENTRYPOINT (./api), so the Deployment sets no `command`.
+#   mcp  cmd/mcp, off by default: read-only MCP server (Streamable HTTP) on
+#        MCP_ADDR (default :8090), command /app/mcp. Starts no relay, no
+#        consumer and never dials Kafka.
+# The image built from the Dockerfile carries both binaries in /app.
+
+replicaCount: 1
+
+# The image is NEVER pulled from a registry in the local kind cluster: it is
+# built from the local checkout and side-loaded with `kind load docker-image`
+# (warehouse-infra overrides repository and tag). In k3s the repository and
+# tag are set by Terraform's valuesObject. `pullPolicy: IfNotPresent` is
+# required for side-loaded images, or the kubelet tries to pull them.
+image:
+  repository: warehouse/outbound-shipping
+  pullPolicy: IfNotPresent
+  tag: "local"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+podLabels: {}
+
+# The service writes nothing to disk (migrations are embedded with go:embed,
+# logs go to stdout), so the root filesystem is mounted read-only. The image
+# runs as UID 1000.
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  fsGroup: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+# targetPort must equal the port of config.addr: the container port is
+# derived from it and the Service targets it by name.
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 8080
+
+# Gateway API route to the api Service. Disabled by default; warehouse-infra
+# turns it on and supplies the Kong Gateway parentRef. The public path is
+# /api/outbound-shipping, the prefix is stripped (rewritten to /) before the
+# request reaches cmd/api.
+gatewayApi:
+  enabled: false
+  parentRefs:
+    - name: ""
+      namespace: ""
+      sectionName: "http"
+  hosts:
+    - path: /api/outbound-shipping
+      pathType: PathPrefix
+  stripPath: true
+
+# Kong plugins rendered by THIS chart (kong-plugins.yaml) and attached to the
+# HTTPRoutes above via the konghq.com/plugins annotation. Defaults off;
+# warehouse-infra's values switch them on. NO auth plugin here, ever: the
+# fleet's endpoints are unauthenticated and the gateway adds no authentication
+# or authorization.
+kongPlugins:
+  cors:
+    enabled: false
+    # Exact browser origin, never "*" (endpoints are unauthenticated).
+    origin: "http://localhost"
+  prometheus:
+    enabled: false
+  opentelemetry:
+    enabled: false
+    # OTLP/HTTP traces endpoint of the fleet collector; needs Kong started
+    # with KONG_TRACING_INSTRUMENTATIONS or the plugin exports zero spans.
+    tracesEndpoint: "http://otel-collector.observability.svc.cluster.local:4318/v1/traces"
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Environment read by cmd/api (cmd/api/config.go). Every key maps 1:1 to one
+# env var and is mirrored into the ConfigMap the api pod mounts with envFrom.
+# Values that have a key here are rendered by the Deployment, never through
+# extraEnv. The binary has NO in-memory mode and NO *_MODE variable.
+config:
+  addr: ":8080"                      # ADDR (default :8080)
+  logLevel: "info"                   # LOG_LEVEL: debug | info | warn (or warning) | error
+  # Outbox relay tuning (the relay runs inside cmd/api). Empty = not rendered,
+  # the binary default applies.
+  outboxIntervalMs: ""               # OUTBOX_INTERVAL_MS: pass interval in ms (binary default 250)
+  outboxBatch: ""                    # OUTBOX_BATCH: rows claimed per pass (binary default 100)
+  outboxMaxAttempts: ""              # OUTBOX_MAX_ATTEMPTS: failures before a poison row is parked (binary default 10)
+  # The six Kafka consumers run INSIDE cmd/api, each under a FIXED, STABLE
+  # group id that must come from values: cmd/api exits at boot without one
+  # and the chart refuses to render with an empty one. A stable id lets a
+  # rescheduled pod resume from its committed offsets; a new id starts at the
+  # earliest offset and replays the topic. Names are service-prefixed so they
+  # never collide with another service's groups on the shared broker. REQUIRED.
+  # FULFILLMENT_CONSUMER_GROUP reads warehouse.fulfillment.events
+  # (PackageManifested, PackageDiverted).
+  fulfillmentConsumerGroup: "outbound-shipping-fulfillment"
+  # DOCK_CONSUMER_GROUP reads warehouse.dock-scheduling.events
+  # (DockAppointmentBooked).
+  dockConsumerGroup: "outbound-shipping-dock"
+  # YARD_CONSUMER_GROUP reads warehouse.yard-management.events
+  # (TrailerDocked, DoorWorkCompleted, TrailerDeparted).
+  yardConsumerGroup: "outbound-shipping-yard"
+  # CPT_CONSUMER_GROUP reads warehouse.process-path-management.events
+  # (CPTScheduleChanged).
+  cptConsumerGroup: "outbound-shipping-cpt"
+  # LAYOUT_CONSUMER_GROUP reads warehouse.facility.events
+  # (ZoneRegistered, LocationSlotRegistered).
+  layoutConsumerGroup: "outbound-shipping-layout"
+  # ANALYTICS_CONSUMER_GROUP reads this service's own
+  # warehouse.outbound-shipping.analytics stream for the LoadBoardView
+  # projector (there is no separate projector binary).
+  analyticsConsumerGroup: "outbound-shipping-analytics"
+  # Sleep, in seconds, run by the api container's preStop hook before SIGTERM:
+  # the binary flips /readyz and closes the listener with no drain delay of
+  # its own, so this gives the endpoint controller time to drop the pod from
+  # the Service first. 0 = no hook.
+  preStopSleepSeconds: 5
+
+# MANDATORY: the service runs on real Postgres only and exits at boot without
+# DATABASE_URL. The chart refuses to render unless database.url or
+# database.existingSecret is set (templates/_helpers.tpl:
+# outbound-shipping.requireDatabase).
+#
+# MIGRATIONS: there is NO migration Job. cmd/api AND cmd/mcp run golang-migrate
+# over the SQL embedded in the binary (go:embed) on every start; the call is
+# idempotent and golang-migrate's advisory lock makes concurrent starts safe.
+# Migrations use MIGRATIONS_DATABASE_URL when set, else DATABASE_URL.
+database:
+  url: ""
+  existingSecret: ""
+  existingSecretKey: "DATABASE_URL"
+  # Key, in the same Secret, of a DIRECT (non-pooled, session-mode) Postgres
+  # connection string used ONLY for the golang-migrate startup step (cmd/api
+  # and cmd/mcp), never for the runtime pgxpool, which always uses
+  # existingSecretKey / DATABASE_URL. golang-migrate takes a session-scoped
+  # pg_advisory_lock that PgBouncer's transaction pooling cannot honour.
+  # Rendered as an `optional: true` secretKeyRef, so a Secret without this key
+  # still starts the pod (the binary falls back to DATABASE_URL). With
+  # database.url the chart's own Secret carries only DATABASE_URL.
+  migrationsExistingSecretKey: "MIGRATIONS_DATABASE_URL"
+
+# MANDATORY: the service runs on real Kafka only (the outbox relay, the six
+# consumers and /readyz all need brokers; there is no default broker and no
+# way to switch Kafka off). kafka.brokers is rendered as KAFKA_BROKERS
+# (comma-separated) into the api; the chart refuses to render without it.
+# cmd/mcp does not read it.
+# Produced: warehouse.outbound-shipping.events and
+# warehouse.outbound-shipping.analytics. Consumed: see the six consumer
+# groups above. The service never creates topics itself.
+kafka:
+  brokers: ""
+
+# Extra env vars appended to the api container as a raw list. Do not use it
+# for a variable that has a dedicated key above.
+extraEnv: []
+
+# The Postgres dial (migrations + pool) at boot is bounded, and
+# periodSeconds * failureThreshold gives a ~60s window before the kubelet
+# gives up. Once startupProbe succeeds, liveness takes over; readiness uses
+# the separate /readyz endpoint (Postgres ping + a TCP dial of the first Kafka
+# broker; flipped to not-ready as the FIRST step of graceful shutdown).
+startupProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  periodSeconds: 2
+  failureThreshold: 30
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: http
+  initialDelaySeconds: 3
+  periodSeconds: 5
+
+# Room for the binary's graceful shutdown: the preStop sleep
+# (config.preStopSleepSeconds), the consumers and the relay stopping (each
+# waits for its in-flight handler) and the 10 s HTTP drain, sequential. The
+# chart refuses a value below preStopSleepSeconds + 20.
+terminationGracePeriodSeconds: 45
+
+# --- MCP server (cmd/mcp) ---
+# Read-only Model Context Protocol server (Streamable HTTP at / and /mcp,
+# GET /healthz). DISABLED by default. Enabling it renders its own Deployment
+# + Service (component=mcp) over the same database, command /app/mcp. Env
+# names in templates/mcp-deployment.yaml match cmd/mcp/main.go: MCP_ADDR,
+# LOG_LEVEL, DATABASE_URL, MIGRATIONS_DATABASE_URL. It has no /readyz, so all
+# three probes use /healthz. No auth / API key: MCP servers are unauthenticated
+# fleet-wide.
+#
+# Deliberately NOT scalable beyond one replica by default: the SDK keeps
+# in-memory, per-process MCP session state and the Service has no session
+# affinity.
+mcp:
+  enabled: false
+  replicaCount: 1
+  httpAddr: ":8090"                  # MCP_ADDR (default :8090)
+  service:
+    type: ClusterIP
+    port: 8090
+    targetPort: 8090
+  # Kong exposure of the MCP server (mcp-route.yaml): host path
+  # /api/mcp/outbound-shipping rewritten to /mcp. Off by default;
+  # warehouse-infra turns it on with the real parentRefs and path.
+  route:
+    enabled: false
+    path: "/api/mcp/outbound-shipping"
+    parentRefs:
+      - name: ""
+        namespace: ""
+        sectionName: "http"
+  extraEnv: []
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

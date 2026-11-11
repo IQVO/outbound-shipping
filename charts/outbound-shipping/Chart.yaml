@@ -1,0 +1,19 @@
+apiVersion: v2
+name: outbound-shipping
+description: >-
+  Outbound Shipping — gets every manifested package onto the right load before
+  its cutoff, proves what left on which trailer (bill of lading) and tells the
+  fleet an order has shipped; publishes Load, Package and BillOfLading facts on
+  warehouse.outbound-shipping.events
+type: application
+# The release job in .github/workflows/ci.yml overrides both on package time:
+# `helm package --version X.Y.Z --app-version X.Y.Z` with the next patch tag
+# (v0.1.0 when none exists). These committed values are only the dev default.
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://github.com/IQVO/outbound-shipping
+keywords:
+  - ddd
+  - hexagonal-architecture
+  - warehouse-management-system
+  - golang

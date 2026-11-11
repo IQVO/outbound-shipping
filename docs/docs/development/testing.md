@@ -98,7 +98,7 @@ Triggers: push and PR on `main` and `develop`, a weekly schedule (mutation), man
 | `drift` | dead code, `go mod tidy -diff`, coverage-quality (schedule) |
 | `api-lint` | spectral over `apis/openapi.yaml` and `apis/asyncapi.yaml` |
 | `vuln` | `govulncheck` |
-| `chart-tests` | `charts/*/tests` (warns only: there is no chart) |
+| `chart-tests` | `charts/outbound-shipping/tests/*.sh` and `test_*.py` (`render_test.sh`, `test_service_selectors.py`; a test printing `SKIP` fails the job) |
 | `arch-test` | `go test ./internal/architecture/... -v` |
 | `docker-publish` | image build, push, signing, SBOM: only on a push to `main`, after the jobs above |
 | `release` | version, tag, chart package, GitHub release: only after `docker-publish` |

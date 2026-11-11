@@ -1,0 +1,149 @@
+{{- include "outbound-shipping.requireRealRuntime" . -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "outbound-shipping.fullname" . }}
+  labels:
+    {{- include "outbound-shipping.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "outbound-shipping.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "outbound-shipping.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "outbound-shipping.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: {{ include "outbound-shipping.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          # No `command`: /app/api is the image ENTRYPOINT (./api).
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          # Every config.* value reaches cmd/api through the chart ConfigMap.
+          # The explicit `env` entries below win over envFrom for the same key
+          # and carry the same values; the checksum/config annotation above
+          # rolls the pods when the ConfigMap changes. Only this Deployment
+          # mounts it: cmd/mcp reads its own explicit env.
+          envFrom:
+            - configMapRef:
+                name: {{ include "outbound-shipping.fullname" . }}
+          # Env contract verified against cmd/api/config.go. Values that have
+          # a dedicated chart key are rendered here, never through extraEnv,
+          # so the same variable is never set twice.
+          env:
+            - name: ADDR
+              value: {{ .Values.config.addr | quote }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel | quote }}
+            {{- if ne (toString .Values.config.outboxIntervalMs) "" }}
+            - name: OUTBOX_INTERVAL_MS
+              value: {{ .Values.config.outboxIntervalMs | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.outboxBatch) "" }}
+            - name: OUTBOX_BATCH
+              value: {{ .Values.config.outboxBatch | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.config.outboxMaxAttempts) "" }}
+            - name: OUTBOX_MAX_ATTEMPTS
+              value: {{ .Values.config.outboxMaxAttempts | quote }}
+            {{- end }}
+            # The six consumers always run on real Kafka inside cmd/api, each
+            # under a STABLE group id from values, never a literal: a stable
+            # id is what makes a rescheduled pod resume from its committed
+            # offsets.
+            - name: FULFILLMENT_CONSUMER_GROUP
+              value: {{ .Values.config.fulfillmentConsumerGroup | quote }}
+            - name: DOCK_CONSUMER_GROUP
+              value: {{ .Values.config.dockConsumerGroup | quote }}
+            - name: YARD_CONSUMER_GROUP
+              value: {{ .Values.config.yardConsumerGroup | quote }}
+            - name: CPT_CONSUMER_GROUP
+              value: {{ .Values.config.cptConsumerGroup | quote }}
+            - name: LAYOUT_CONSUMER_GROUP
+              value: {{ .Values.config.layoutConsumerGroup | quote }}
+            - name: ANALYTICS_CONSUMER_GROUP
+              value: {{ .Values.config.analyticsConsumerGroup | quote }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "outbound-shipping.databaseSecretName" . }}
+                  key: {{ .Values.database.existingSecretKey }}
+            {{- if .Values.database.migrationsExistingSecretKey }}
+            # A direct (non-pooled) connection used only for the
+            # golang-migrate step at boot, never for the runtime pgxpool.
+            # `optional: true` so a Secret without this key still starts the
+            # pod: the binary falls back to DATABASE_URL.
+            - name: MIGRATIONS_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "outbound-shipping.databaseSecretName" . }}
+                  key: {{ .Values.database.migrationsExistingSecretKey }}
+                  optional: true
+            {{- end }}
+            # Mandatory (requireKafka): the outbox relay, the consumers and
+            # /readyz.
+            - name: KAFKA_BROKERS
+              value: {{ .Values.kafka.brokers | quote }}
+            {{- range .Values.extraEnv }}
+            - {{ toYaml . | nindent 14 | trim }}
+            {{- end }}
+          {{- if gt (int .Values.config.preStopSleepSeconds) 0 }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", {{ .Values.config.preStopSleepSeconds | quote }}]
+          {{- end }}
+          {{- with .Values.startupProbe }}
+          startupProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
