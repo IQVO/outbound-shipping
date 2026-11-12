@@ -57,7 +57,7 @@ three regulation categories: **maintainability**, **architecture fitness**,
 | `/code-review`, `/architecture-review`, `/domain-review` (`.claude/agents/`) | architecture fitness / behaviour | **inferential** | invoked by hand | no | LLM cost per invocation |
 
 Every row above is a job in this repo's `.github/workflows/` or a target in its `Makefile`; a sensor not listed here does not run in outbound-shipping.
-Not run here: `helm-lint`, because there is no `charts/` directory (no Helm chart yet); `web`, because there is no `web/` micro-frontend.
+Not run here: `helm-lint` (this repo's chart is guarded by the `chart-tests` job instead, which renders it and runs its tests); `web`, because there is no `web/` micro-frontend.
 
 **New sensors default to advisory for ~2 weeks, then auto-promote to
 blocking** (user decision, Phase 5 of the harness-coverage-expansion plan)
