@@ -13,13 +13,16 @@ synthetic.
 
 Status: **released as `v0.1.0`** (2026-11-11, from `main`; image `ghcr.io/iqvo/outbound-shipping:v0.1.0`
 and the Helm chart `outbound-shipping-0.1.0.tgz` are published), **registered and image-pinned in
-warehouse-infra (PR 205), not applied to the cluster**: no outbound-shipping pod runs, so nothing is
-deployed and no edge to another context is live. The service has its three aggregates,
+warehouse-infra (PR 205), and applied to the k3s cluster on 2026-11-12**: one `api` replica runs at
+`857edfd` on `k3s-agent` (Argo CD Synced/Healthy, the Kong route `/api/outbound-shipping` answers 200;
+read 2026-11-13). The seven Kafka topics were pre-created before the first sync, the MCP server is off
+and there is no relay Deployment (the relay runs inside `cmd/api`). Edges to other contexts are live
+where both ends run. Not verified: consumer-group lag and delivery from the outbox. The service has its three aggregates,
 REST and read-only MCP surfaces, the Kafka consumers, the transactional outbox and
 the ship-confirm that follows the trailer's physical departure (`yard-management`
 `TrailerDeparted`, ADR 0002). The Helm chart is in `charts/outbound-shipping/` (api, optional mcp, Gateway API routes, Kong plugins).
-The open steps (topics pre-created, apply) are in the runbook and in
-`docs/docs/operations/before-first-release.md`.
+The apply and what running looks like are in the runbook and in
+`docs/docs/operations/before-first-release.md` (every checklist row done).
 It owns `OutboundLoad`, `ShippingPackage` and `BillOfLading` (see `docs/adr/`, ADRs
 0001 to 0006). Binaries: `cmd/api` (REST, six Kafka consumers, outbox relay) and
 `cmd/mcp` (read-only MCP).

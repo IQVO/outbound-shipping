@@ -118,7 +118,7 @@ curl -s -X POST http://localhost:8080/missed-load-sweeps \
   -d '{"site_id":"SITE-1"}'
 ```
 
-The service is **released as `v0.1.0` and registered in warehouse-infra (an `apps.yaml` entry, helm values and an image pin), but not applied to the cluster**: no outbound-shipping pod runs and the Kong route `/api/outbound-shipping` that the helm values declare is not rendered yet (see [Runbook](/docs/operations/runbook#deployment-status-released-v010-registered-and-pinned-not-applied)). Until an apply, the calls above go straight to a process you started yourself.
+The service is **released as `v0.1.0` and applied to the k3s cluster** (2026-11-12): one `api` replica runs at `857edfd`, and the Kong route `/api/outbound-shipping` that the helm values declare is rendered and answered 200 through the cluster gateway (read 2026-11-13; see [Runbook](/docs/operations/runbook#deployment-status-applied-to-k3s-running-v010)). The calls above still go to a process you started yourself.
 
 ## What to read next
 
