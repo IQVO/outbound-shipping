@@ -41,7 +41,11 @@ func (uc *ProjectBoard) Handle(ctx context.Context, eventID string, fold BoardFo
 	return uc.apply(ctx, ProjectorConsumer, eventID, func(ctx context.Context) (Outcome, error) {
 		switch fold.Name {
 		case "LoadPlanned":
-			return appliedOrIgnore(uc.Board.ApplyLoadPlanned(ctx, fold.Load, fold.Site, fold.Cpt, fold.Date, fold.Method, fold.At))
+			// The board's cutoff is the LOAD's cutoff (the LoadPlanned
+			// payload carries it; loads_at_risk and the on-time verdict
+			// read it), never the event's occurrence time — found by
+			// cmd/mcp's integration test.
+			return appliedOrIgnore(uc.Board.ApplyLoadPlanned(ctx, fold.Load, fold.Site, fold.Cpt, fold.Date, fold.Method, fold.Cutoff))
 		case "PackageStaged":
 			return appliedOrIgnore(uc.Board.ApplyCount(ctx, fold.Load, 1, 0))
 		case "PackageLoaded":
