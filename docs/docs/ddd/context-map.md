@@ -35,13 +35,13 @@ flowchart LR
     AG -.->|"MCP read-only"| OS
     OS -->|"OHS+PL<br/>ShipmentConfirmed,<br/>PackageMissedLoad"| OM
     OS -->|"OHS+PL<br/>PackageMissedLoad"| EM
-    OS -.->|"intended, not built<br/>ShipmentConfirmed"| NF
+    OS -.->|"built on develop 2026-11-12,<br/>not running: ShipmentConfirmed"| NF
     OS -.->|"intended, not built<br/>LoadingStarted, LoadClosed,<br/>LoadReopened"| YM2
 ```
 
 Source: `internal/adapters/inbound/kafka/fulfillment_consumer.go`, `internal/adapters/inbound/kafka/cpt_layout_consumers.go`, `internal/adapters/inbound/kafka/dock_yard_consumers.go`, `internal/adapters/outbound/events/sink.go`, `apis/asyncapi.yaml`, `docs/adr/0001-outbound-shipping-bounded-context.md`, `docs/adr/0005-cloudevents-envelope-and-type-catalogue.md`.
 
-Legend: arrows point from upstream to downstream. Solid = events or commands that exist on both sides; dotted = a synchronous read, or an edge that [ADR 0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue) intends but whose consumer does not exist yet on the consumer's `develop` (checked 2026-11-11). "Exists on both sides" is about code and configuration, not about the cluster: outbound-shipping is released and registered in warehouse-infra but **not applied**, so **no edge here is live** today (see [Integration](/docs/ecosystem/integration#edge-status-in-the-cluster)). `yard-management` appears twice because it is on both sides of the intended relationship. People and callers are rounded boxes.
+Legend: arrows point from upstream to downstream. Solid = events or commands that exist on both sides; dotted = a synchronous read, or an edge that [ADR 0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue) intends but is not yet running in the cluster (checked 2026-11-13: network-fulfillment's consumer landed on its `develop` on 2026-11-12 but the pod's image predates it; yard-management's consumer does not exist). "Exists on both sides" is about code and configuration; the live question is separate: outbound-shipping is applied and running, so the solid edges whose both ends run — the five upstreams, the analytics fold and exception-management — **are live** today (see [Integration](/docs/ecosystem/integration#edge-status-in-the-cluster)). `yard-management` appears twice because it is on both sides of the intended relationship. People and callers are rounded boxes.
 
 Omitted: Kafka and Postgres as infrastructure. **Separate Ways** (no edge at all): the retail network; no `retailnetwork.*` topic is consumed or produced, and network-fulfillment stays the only channel to it. No sibling is called synchronously: sibling data reaches this service only as event-fed local copies.
 
@@ -56,7 +56,7 @@ Omitted: Kafka and Postgres as infrastructure. **Separate Ways** (no edge at all
 | yard-management | upstream | Customer/Supplier | `warehouse.yard-management.events` | The only recorder of physical facts. Pinned and tested ([ADR 0006](/docs/adr/0006-yard-contract-pinned)). |
 | order-management | downstream | OHS + PL | `warehouse.outbound-shipping.events` | Implemented in code (shipped lines from `ShipmentConfirmed`, re-promise from `PackageMissedLoad`); off by default and not switched on in warehouse-infra. |
 | exception-management | downstream | OHS + PL | `warehouse.outbound-shipping.events` | Implemented: one case per `PackageMissedLoad`; its consumer group is set in warehouse-infra. |
-| network-fulfillment | downstream | OHS + PL (intended) | `warehouse.outbound-shipping.events` | Absent on its `develop`. |
+| network-fulfillment | downstream | OHS + PL (intended) | `warehouse.outbound-shipping.events` | Built on its `develop` on 2026-11-12 (its PR 165); the running pod's image predates it, so the edge is not live yet. |
 | yard-management (reverse edge) | downstream | C/S (intended) | `warehouse.outbound-shipping.events` | Absent: no handler on its `develop`. |
 | dock operators, schedulers | clients | none | REST | Unauthenticated. |
 | MCP agents | clients | none | MCP over Streamable HTTP | Read-only, unauthenticated. |

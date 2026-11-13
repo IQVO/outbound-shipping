@@ -35,7 +35,7 @@ function HomepageHeader() {
           {siteConfig.title}
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
-        <p className={styles.heroLead}>Outbound Shipping gets every manifested package onto the right load before its cutoff, proves what left on which trailer, and tells the fleet that an order has actually shipped. A load is planned from the first manifest, started by the trailer docking, and confirmed only by the yard&apos;s physical departure, which also issues the bill of lading. It is released as v0.1.0 and registered in warehouse-infra, but not applied to the cluster yet.</p>
+        <p className={styles.heroLead}>Outbound Shipping gets every manifested package onto the right load before its cutoff, proves what left on which trailer, and tells the fleet that an order has actually shipped. A load is planned from the first manifest, started by the trailer docking, and confirmed only by the yard&apos;s physical departure, which also issues the bill of lading. It is released as v0.1.0, registered in warehouse-infra, and applied to the k3s cluster since 2026-11-12, where one api replica runs at 857edfd.</p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/docs/overview/introduction">
             Read the docs
