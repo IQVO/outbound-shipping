@@ -57,12 +57,17 @@ func (s *BoardStore) ApplyMissed(ctx context.Context, load shared.LoadID, miss i
 	return wrapBoard(err, "missed", load)
 }
 
-// ApplyClosed implements usecases.BoardStoreWriter.
-func (s *BoardStore) ApplyClosed(ctx context.Context, load shared.LoadID, closedAt, cutoff time.Time) error {
+// ApplyClosed implements usecases.BoardStoreWriter. The on-time verdict
+// compares against the ROW's cutoff — the column LoadPlanned filled — not a
+// parameter: the LoadClosed payload carries no cutoff of its own (see
+// docs/docs/api-reference/events.md), so a parameter would always be the zero
+// instant, which both misjudges every close as late and fails pgx's parameter
+// typing (found by cmd/api's integration test).
+func (s *BoardStore) ApplyClosed(ctx context.Context, load shared.LoadID, closedAt, _ time.Time) error {
 	_, err := queryFor(ctx, s.pool).Exec(ctx, `
 		UPDATE load_board SET
-		    closed_at = $2, closed_on_time = ($2 <= $3), updated_at = now()
-		WHERE load_id = $1`, load, closedAt.UTC(), cutoff.UTC())
+		    closed_at = $2, closed_on_time = ($2 <= cutoff), updated_at = now()
+		WHERE load_id = $1`, load, closedAt.UTC())
 	return wrapBoard(err, "closed", load)
 }
 
@@ -135,7 +140,11 @@ func (s *BoardStore) Report(ctx context.Context, site shared.SiteID, date outbou
 // floored at 0).
 func (s *BoardStore) RowsAtRisk(ctx context.Context, site shared.SiteID, now time.Time, horizon time.Duration, limit int) ([]repository.LoadBoardRow, error) {
 	where := "WHERE closed_at IS NULL AND cancelled_at IS NULL AND cutoff >= $2 AND cutoff <= $3"
-	args := []any{now.UTC(), now.UTC().Add(horizon), limit}
+	// $1 is the LIMIT of the query's tail, $2/$3 the cutoff bounds: the
+	// args must follow the PLACEHOLDER numbers, not the WHERE order (a
+	// limit encoded into timestamptz fails the whole read; found by
+	// cmd/mcp's integration test).
+	args := []any{limit, now.UTC(), now.UTC().Add(horizon)}
 	if site != "" {
 		args = append(args, site)
 		where += fmt.Sprintf(" AND site_id = $%d", len(args))
