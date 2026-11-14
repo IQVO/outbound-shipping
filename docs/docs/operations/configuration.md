@@ -9,7 +9,7 @@ description: "Every environment variable each outbound-shipping binary reads, wi
 
 Two binaries ship from this repository: `cmd/api` (REST, the six Kafka consumers and the outbox relay in one process) and `cmd/mcp` (read-only MCP server). Each reads its own environment; there is no config file and no in-memory or log-sink mode. A missing required variable is a boot error that names the variable, and `cmd/api` reports every missing variable in one message.
 
-Source: `cmd/api/config.go` (`loadConfig`, `groupVars`), `cmd/api/main.go`, `cmd/mcp/main.go`, `internal/adapters/outbound/postgres/migrate.go` (`MigrationsURL`).
+Source: `cmd/api/config.go` (`loadConfig`, `groupVars`), `cmd/api/main.go`, `cmd/mcp/main.go`, `cmd/mcp/telemetry.go`, `internal/adapters/outbound/telemetry/telemetry.go` (`ENVIRONMENT`), `internal/adapters/outbound/postgres/migrate.go` (`MigrationsURL`).
 
 Integer variables of `cmd/api` are read with one rule: a value that is not a number, or is below the variable's minimum, is **silently replaced by the default** (no warning is logged). The minimum is 1 for `OUTBOX_INTERVAL_MS` and `OUTBOX_BATCH` (so `0` and negative values mean the default there) and 0 for `OUTBOX_MAX_ATTEMPTS`, where an explicit `0` means **unlimited** (fleet convention) and only negative or non-numeric values fall back to the default.
 
@@ -62,6 +62,6 @@ The chart `charts/outbound-shipping/` renders each variable above from a dedicat
 ## What is not configurable
 
 - **No auth variables.** REST, MCP and the probes are unauthenticated; access control is the cluster network boundary.
-- **No OpenTelemetry variables.** Neither binary installs an OpenTelemetry SDK or exporter today, so `OTEL_*` variables have no effect (see [Observability](/docs/operations/observability)).
+- **No other OpenTelemetry variables.** The four above are the only ones either binary reads by name; the SDK's own `OTEL_EXPORTER_OTLP_ENDPOINT` handling applies to the endpoint, and `OTEL_RESOURCE_ATTRIBUTES` is read by the SDK's default resource (see [Observability](/docs/operations/observability)). With `OTEL_EXPORTER_OTLP_ENDPOINT` empty no SDK is installed at all.
 - **No mode toggles.** There is no `*_MODE`, no in-memory fallback (`TestRuntimeBinaryHasNoInMemoryAdapters`) and no envelope toggle: every Kafka message is a CloudEvents 1.0 structured-mode event.
 - **Kafka topics are constants,** not environment: `warehouse.outbound-shipping.events` and `warehouse.outbound-shipping.analytics` for the topics this service writes, plus the five consumed topics above. Dead-letter topics are the consumed topic plus `.dlq`.
