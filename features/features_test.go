@@ -187,7 +187,7 @@ func (s *service) wireRules(uow *memory.UnitOfWork, sink *events.Sink, clock clo
 		Stage: s.stage, Load: s.loadPkg, Unload: s.unload, Close: s.closeCmd,
 		Reopen: s.reopen, Cancel: s.cancel, VoidBol: s.voidBol, Sweep: s.sweep,
 		Queries: s.queries, Idempotency: idem.Middleware, Readiness: s.readiness,
-	})
+	}, nil, "outbound-shipping")
 }
 
 // world is the per-scenario state on top of one wired service.
