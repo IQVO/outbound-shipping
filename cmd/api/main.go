@@ -19,6 +19,10 @@
 //	ANALYTICS_CONSUMER_GROUP      REQUIRED. projector's consumer group
 //	ADDR                          listen address (default :8080)
 //	LOG_LEVEL                     debug | info | warn (or warning) | error (default info)
+//	OTEL_EXPORTER_OTLP_ENDPOINT   OTLP/gRPC Collector (host:port or URL); empty = telemetry off
+//	OTEL_SERVICE_NAME             service.name of spans and metrics (default outbound-shipping)
+//	SERVICE_VERSION               service.version (default dev)
+//	ENVIRONMENT                   deployment.environment.name (default local)
 //	OUTBOX_INTERVAL_MS            relay pass interval (default 250)
 //	OUTBOX_BATCH                  relay batch size (default 100)
 //	OUTBOX_MAX_ATTEMPTS           failed sends after which the relay excludes a row from
@@ -29,12 +33,15 @@ package main
 
 import (
 	"context"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/claudioed/outbound-shipping/internal/adapters/outbound/telemetry"
 )
 
 // shutdownTimeout bounds the HTTP drain and the consumers' final commit.
@@ -54,6 +61,14 @@ func run() error {
 	}
 	logger := newLogger(cfg.LogLevel)
 	slog.SetDefault(logger)
+
+	// Telemetry is flushed LAST (deferred first): the final spans and
+	// metrics of the drain below still make it out.
+	flushTelemetry, err := startTelemetry(logger, cfg)
+	if err != nil {
+		return err
+	}
+	defer flushTelemetry()
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -95,8 +110,14 @@ func run() error {
 	return app.server.Shutdown(drainCtx)
 }
 
-// newLogger maps LOG_LEVEL onto slog levels; unknown values mean info.
+// newLogger maps LOG_LEVEL onto slog levels; unknown values mean info. The
+// JSON handler is wrapped so every record written with a context that carries
+// a span (the *Context logger variants) gets trace_id and span_id.
 func newLogger(level string) *slog.Logger {
+	return newLoggerTo(os.Stdout, level)
+}
+
+func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var lv slog.Level
 	switch level {
 	case "debug":
@@ -108,5 +129,5 @@ func newLogger(level string) *slog.Logger {
 	default:
 		lv = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lv}))
+	return slog.New(telemetry.WithTraceContext(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: lv})))
 }

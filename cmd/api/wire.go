@@ -13,6 +13,7 @@ import (
 	outboundkafka "github.com/claudioed/outbound-shipping/internal/adapters/outbound/kafka"
 	"github.com/claudioed/outbound-shipping/internal/adapters/outbound/postgres"
 	"github.com/claudioed/outbound-shipping/internal/adapters/outbound/system"
+	"github.com/claudioed/outbound-shipping/internal/application/ports"
 	"github.com/claudioed/outbound-shipping/internal/application/usecases"
 )
 
@@ -104,7 +105,7 @@ func wire(ctx context.Context, cfg config, logger *slog.Logger) (*application, e
 	srv := buildHTTPServer(httpDeps{
 		uow: uow, loads: loads, pkgs: pkgs, bols: bols, copies: copies,
 		sink: sink, idemStore: idemStore, queries: queries,
-		readiness: readiness, clock: clock,
+		readiness: readiness, clock: clock, metrics: loadMetrics(logger),
 	})
 
 	consumers := startConsumers(cfg, logger, policies)
@@ -112,7 +113,7 @@ func wire(ctx context.Context, cfg config, logger *slog.Logger) (*application, e
 
 	return &application{
 		server: &http.Server{
-			Addr: cfg.Addr, Handler: inboundhttp.NewRouter(srv), ReadHeaderTimeout: 5 * time.Second,
+			Addr: cfg.Addr, Handler: inboundhttp.NewRouter(srv, logger, cfg.ServiceName), ReadHeaderTimeout: 5 * time.Second,
 		},
 		readiness: readiness,
 		consumers: consumers,
@@ -136,6 +137,7 @@ type httpDeps struct {
 	queries   *usecases.Queries
 	readiness *inboundhttp.Readiness
 	clock     system.Clock
+	metrics   ports.LoadMetrics
 }
 
 // buildHTTPServer wires the REST adapter: the scan and close commands, the
@@ -157,6 +159,7 @@ func buildHTTPServer(d httpDeps) *inboundhttp.Server {
 			return idem.Middleware(next)
 		},
 		Readiness: d.readiness,
+		Metrics:   d.metrics,
 	}
 }
 
