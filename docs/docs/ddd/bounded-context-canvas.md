@@ -35,7 +35,7 @@ Own the last mile inside the building: staging, the outbound load, the physical 
 | **Execution context** | scans move packages through staged, loaded and shipped |
 | **Specification-lite** | the load plan is derived from the cutoff schedule, not authored here |
 | **Audit** | the bill of lading and the once-only missed-load fact |
-| **Gateway for downstream** | `ShipmentConfirmed` and `PackageMissedLoad` on `warehouse.outbound-shipping.events` are a published language for order-management, exception-management and (intended) network-fulfillment |
+| **Gateway for downstream** | `ShipmentConfirmed` and `PackageMissedLoad` on `warehouse.outbound-shipping.events` are a published language for order-management, exception-management and network-fulfillment (consumer built on its `develop`, not yet running) |
 | **Analysis (small)** | the load board and the adherence report |
 
 ## Inbound communication
@@ -60,7 +60,7 @@ Own the last mile inside the building: staging, the outbound load, the physical 
 
 | Message | To | Type | Relationship |
 | --- | --- | --- | --- |
-| `ShipmentConfirmed` | order-management (implemented), network-fulfillment (intended, not implemented) | event | Open Host Service and Published Language |
+| `ShipmentConfirmed` | order-management (implemented), network-fulfillment (built on its `develop`, not yet running) | event | Open Host Service and Published Language |
 | `PackageMissedLoad` | order-management, exception-management (both implemented) | event | OHS and PL |
 | `LoadingStarted`, `LoadClosed`, `LoadReopened` | yard-management (intended, not implemented) | event | OHS and PL |
 | `LoadPlanned`, `LoadDoorAssigned`, `LoadCancelled`, `PackageStaged`, `PackageLoaded`, `PackageUnloaded`, `BillOfLadingIssued`, `BillOfLadingVoided` | no integration consumer; own projector via the analytics twin | event | |
@@ -95,5 +95,5 @@ Load adherence (`loads_closed / loads_total` per cutoff and date), packages miss
 
 - Who calls `POST /missed-load-sweeps` and when: nothing in the repository schedules it.
 - Who consumes `LoadingStarted`, `LoadClosed` and `LoadReopened`: yard-management declares no handler.
-- When network-fulfillment replaces its manual shipment confirmation with `ShipmentConfirmed` ([ADR 0004](/docs/adr/0004-shipment-confirmed-replaces-the-manual-network-confirmation)).
+- When network-fulfillment's `ShipmentConfirmed` consumer, built on its `develop` (its PR 165), is deployed: the running pod predates it ([ADR 0004](/docs/adr/0004-shipment-confirmed-replaces-the-manual-network-confirmation)).
 - Whether the process-path-management, facility-layout and fulfillment-execution payloads should be pinned like the yard and dock-scheduling ones ([ADR 0007](/docs/adr/0007-dock-scheduling-contract-pinned) lists the first and last as follow-ups). The dock-scheduling pin itself is done and was refreshed in PR 18.

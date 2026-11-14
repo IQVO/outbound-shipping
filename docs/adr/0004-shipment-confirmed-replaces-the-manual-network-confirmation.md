@@ -42,3 +42,11 @@ ADR 0001).
 - order-management (wave 6, D7) consumes the same event to add order-level
   `Shipped`/`PartiallyShipped` and line `Shipped`; this service does not
   write order state.
+
+## Addendum 2026-11-13: current state
+
+The consumer is built on network-fulfillment's `develop`: `internal/adapters/inbound/kafka/shipment_confirmed_consumer.go`
+(its PR 165, merged 2026-11-12), started from `cmd/netfulfil/outbound_shipping.go`. It dedupes through the
+confirmation use case's `(shipment-ref, order-id)` key (load id plus order id), not on the CloudEvents `id`.
+It reads an optional `package_count` per order that `ShipmentConfirmed` does not carry yet; `0` keeps the
+single-package placeholder. The running pod predates the merge ([Integration](/docs/ecosystem/integration)).
