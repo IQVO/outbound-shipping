@@ -97,6 +97,33 @@ resources:
     cpu: 100m
     memory: 128Mi
 
+# deployment.environment.name on every span and metric this service exports
+# (ENVIRONMENT, read by internal/adapters/outbound/telemetry). Set per
+# cluster: local / staging / production.
+environment: "local"
+
+# service.version on every span and metric (SERVICE_VERSION). Empty = the
+# image tag, or the chart appVersion when the tag is empty too. The release
+# image tag is the version a trace should be attributed to, so leave it empty
+# unless the tag is not a version.
+serviceVersion: ""
+
+# OpenTelemetry traces + metrics, pushed over OTLP/gRPC to the fleet
+# Collector (the endpoint below is the in-cluster Collector Service of the
+# warehouse-infra cluster; host:port or a full URL). Rendered for EVERY
+# component that runs a binary: the api and, when enabled, mcp. Export is
+# non-blocking, so a Collector that is down costs telemetry and nothing
+# else. otel.enabled=false renders no OTEL_* variable at all, and a binary
+# with no endpoint installs no SDK (internal/adapters/outbound/telemetry
+# Setup). serviceName is the api's service.name; the mcp Deployment appends
+# "-mcp" so the two never share a metric series. Chart-owned names
+# (OTEL_EXPORTER_OTLP_ENDPOINT, OTEL_SERVICE_NAME, SERVICE_VERSION,
+# ENVIRONMENT) are refused in extraEnv and mcp.extraEnv.
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  serviceName: "outbound-shipping"
+
 # Environment read by cmd/api (cmd/api/config.go). Every key maps 1:1 to one
 # env var and is mirrored into the ConfigMap the api pod mounts with envFrom.
 # Values that have a key here are rendered by the Deployment, never through

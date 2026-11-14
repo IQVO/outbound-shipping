@@ -28,6 +28,10 @@ Integer variables of `cmd/api` are read with one rule: a value that is not a num
 | `ANALYTICS_CONSUMER_GROUP` | none | yes | Consumer group of the service's own projector consumer (`warehouse.outbound-shipping.analytics`). |
 | `ADDR` | `:8080` | no | Listen address of the REST API. |
 | `LOG_LEVEL` | `info` | no | `debug`, `info`, `warn` (or `warning`), `error`; any other value is `info`. Case-sensitive (lower case). |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none | no | OTLP/gRPC endpoint of the Collector, `host:port` or a full URL (`https://...` keeps TLS). **Empty = telemetry off**: no SDK is installed, no metric or span is exported, and logs lose nothing but their trace ids. |
+| `OTEL_SERVICE_NAME` | `outbound-shipping` | no | `service.name` of every exported span and metric. |
+| `SERVICE_VERSION` | `dev` | no | `service.version` of every exported span and metric. |
+| `ENVIRONMENT` | `local` | no | `deployment.environment.name` of every exported span and metric. |
 | `OUTBOX_INTERVAL_MS` | `250` | no | Milliseconds the relay sleeps after a pass that did not fill a batch. |
 | `OUTBOX_BATCH` | `100` | no | Outbox rows claimed per relay pass. |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | no | Failed sends after which a row is excluded from future claims (see the [runbook](/docs/operations/runbook)). `0` = unlimited (the row is retried forever); negative or non-numeric = `20`. |
@@ -46,6 +50,10 @@ The code defaults of the relay package itself (`DefaultInterval` 1 s, `DefaultMa
 | `MIGRATIONS_DATABASE_URL` | value of `DATABASE_URL` | no | Direct DSN for the boot migrations. `cmd/mcp` runs the same idempotent embedded migrations as `cmd/api` (golang-migrate's advisory lock makes concurrent starts safe). |
 | `MCP_ADDR` | `:8090` | no | Listen address of the MCP server. |
 | `LOG_LEVEL` | `info` | no | Same values as `cmd/api`. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none | no | Same as `cmd/api`: OTLP/gRPC Collector endpoint; empty = telemetry off. |
+| `OTEL_SERVICE_NAME` | `outbound-shipping-mcp` | no | `service.name` of every exported span and metric. The default differs from `cmd/api`'s so the two binaries never share a metric series. |
+| `SERVICE_VERSION` | `dev` | no | Same as `cmd/api`. |
+| `ENVIRONMENT` | `local` | no | Same as `cmd/api`. |
 
 ## In the cluster: the Helm chart and warehouse-infra
 
