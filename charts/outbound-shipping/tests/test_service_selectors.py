@@ -43,16 +43,25 @@ ENABLE_EVERYTHING = BASE + [
 
 # Env each Deployment's binary actually reads. Everything else must NOT appear
 # on that Deployment.
+# OpenTelemetry (internal/adapters/outbound/telemetry, cmd/api/config.go,
+# cmd/mcp/telemetry.go): the chart renders these for EVERY component that runs
+# a binary.
+OTEL_ENV = {
+    "OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_SERVICE_NAME", "SERVICE_VERSION", "ENVIRONMENT",
+}
+# service.name of each Deployment: the mcp one carries a -mcp suffix so the
+# two never share a metric series.
+WANT_SERVICE_NAME = {RELEASE: "outbound-shipping", f"{RELEASE}-mcp": "outbound-shipping-mcp"}
 WANT_ENV: dict[str, set[str]] = {
-    RELEASE: {  # cmd/api (cmd/api/config.go) + the migrations DSN
+    RELEASE: {  # cmd/api (cmd/api/config.go) + the migrations DSN + OpenTelemetry
         "ADDR", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL", "KAFKA_BROKERS",
         "FULFILLMENT_CONSUMER_GROUP", "DOCK_CONSUMER_GROUP", "YARD_CONSUMER_GROUP",
         "CPT_CONSUMER_GROUP", "LAYOUT_CONSUMER_GROUP", "ANALYTICS_CONSUMER_GROUP",
         "OUTBOX_INTERVAL_MS", "OUTBOX_BATCH", "OUTBOX_MAX_ATTEMPTS",
-    },
+    } | OTEL_ENV,
     f"{RELEASE}-mcp": {  # cmd/mcp: no Kafka, no consumers, no outbox
         "MCP_ADDR", "LOG_LEVEL", "DATABASE_URL", "MIGRATIONS_DATABASE_URL",
-    },
+    } | OTEL_ENV,
 }
 # Required on the everything-set render (set through values), so a rename in
 # values.yaml cannot silently stop rendering a var the binary reads.
@@ -141,6 +150,9 @@ def check_components(docs: list[dict], failures: list[str]) -> None:
         duplicates = sorted({n for n in env if env.count(n) > 1})
         if duplicates:
             failures.append(f"Deployment {name} renders env vars twice: {duplicates}")
+        values = {e["name"]: e.get("value") for e in container.get("env", [])}
+        if values.get("OTEL_SERVICE_NAME") != WANT_SERVICE_NAME[name]:
+            failures.append(f"Deployment {name} OTEL_SERVICE_NAME is {values.get('OTEL_SERVICE_NAME')!r}, want {WANT_SERVICE_NAME[name]!r}")
         if not container.get("securityContext", {}).get("readOnlyRootFilesystem"):
             failures.append(f"Deployment {name} must mount the root filesystem read-only")
 

@@ -151,6 +151,63 @@ rolling update SIGKILLs a pod mid-drain.
 {{- end -}}
 
 {{/*
+service.version of every component: serviceVersion, else the image tag, else
+the chart appVersion.
+*/}}
+{{- define "outbound-shipping.serviceVersion" -}}
+{{- .Values.serviceVersion | default .Values.image.tag | default .Chart.AppVersion -}}
+{{- end -}}
+
+{{/*
+otel.enabled needs an endpoint and a service name: an empty OTLP endpoint would
+silently switch the SDK off in the binary, which is what otel.enabled=false is
+for.
+*/}}
+{{- define "outbound-shipping.requireOtel" -}}
+{{- if .Values.otel.enabled -}}
+{{- if not .Values.otel.endpoint -}}
+{{- fail "otel.endpoint is required while otel.enabled is true (OTEL_EXPORTER_OTLP_ENDPOINT); set otel.enabled=false to run without telemetry." -}}
+{{- end -}}
+{{- if not .Values.otel.serviceName -}}
+{{- fail "otel.serviceName is required while otel.enabled is true (OTEL_SERVICE_NAME)." -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
+The telemetry variables the chart owns, rendered into the env of EVERY
+component Deployment that runs a binary. Call with (dict "root" . "suffix" "")
+for the api and (dict "root" . "suffix" "-mcp") for mcp: the suffix keeps the
+two service.name values (and so their metric series) apart.
+*/}}
+{{- define "outbound-shipping.telemetryEnv" -}}
+- name: ENVIRONMENT
+  value: {{ .root.Values.environment | quote }}
+- name: SERVICE_VERSION
+  value: {{ include "outbound-shipping.serviceVersion" .root | quote }}
+{{- if .root.Values.otel.enabled }}
+- name: OTEL_EXPORTER_OTLP_ENDPOINT
+  value: {{ .root.Values.otel.endpoint | quote }}
+- name: OTEL_SERVICE_NAME
+  value: {{ printf "%s%s" .root.Values.otel.serviceName .suffix | quote }}
+{{- end }}
+{{- end -}}
+
+{{/*
+extraEnv / mcp.extraEnv must not set a variable this chart owns: a second
+entry for the same name breaks ArgoCD's diff and one of the two silently
+loses. Call with (dict "env" <list> "where" <values key>).
+*/}}
+{{- define "outbound-shipping.requireOwnedEnv" -}}
+{{- $where := .where -}}
+{{- range .env -}}
+{{- if has .name (list "OTEL_EXPORTER_OTLP_ENDPOINT" "OTEL_SERVICE_NAME" "SERVICE_VERSION" "ENVIRONMENT") -}}
+{{- fail (printf "%s sets %s, which the chart owns: use otel.enabled / otel.endpoint / otel.serviceName / serviceVersion / environment instead" $where .name) -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+
+{{/*
 Every render-time requirement of the real runtime, in one include. The api
 Deployment (always rendered) includes it, so a mis-set release fails
 `helm template` / `helm install` whichever component is enabled.
@@ -160,6 +217,9 @@ Deployment (always rendered) includes it, so a mis-set release fails
 {{- include "outbound-shipping.requireKafka" . -}}
 {{- include "outbound-shipping.requireConsumerGroups" . -}}
 {{- include "outbound-shipping.requireShutdownBudget" . -}}
+{{- include "outbound-shipping.requireOtel" . -}}
+{{- include "outbound-shipping.requireOwnedEnv" (dict "env" .Values.extraEnv "where" "extraEnv") -}}
+{{- include "outbound-shipping.requireOwnedEnv" (dict "env" .Values.mcp.extraEnv "where" "mcp.extraEnv") -}}
 {{- end -}}
 
 {{/*

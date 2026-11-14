@@ -9,7 +9,7 @@ description: "Every environment variable each outbound-shipping binary reads, wi
 
 Two binaries ship from this repository: `cmd/api` (REST, the six Kafka consumers and the outbox relay in one process) and `cmd/mcp` (read-only MCP server). Each reads its own environment; there is no config file and no in-memory or log-sink mode. A missing required variable is a boot error that names the variable, and `cmd/api` reports every missing variable in one message.
 
-Source: `cmd/api/config.go` (`loadConfig`, `groupVars`), `cmd/api/main.go`, `cmd/mcp/main.go`, `internal/adapters/outbound/postgres/migrate.go` (`MigrationsURL`).
+Source: `cmd/api/config.go` (`loadConfig`, `groupVars`), `cmd/api/main.go`, `cmd/mcp/main.go`, `cmd/mcp/telemetry.go`, `internal/adapters/outbound/telemetry/telemetry.go` (`ENVIRONMENT`), `internal/adapters/outbound/postgres/migrate.go` (`MigrationsURL`).
 
 Integer variables of `cmd/api` are read with one rule: a value that is not a number, or is below the variable's minimum, is **silently replaced by the default** (no warning is logged). The minimum is 1 for `OUTBOX_INTERVAL_MS` and `OUTBOX_BATCH` (so `0` and negative values mean the default there) and 0 for `OUTBOX_MAX_ATTEMPTS`, where an explicit `0` means **unlimited** (fleet convention) and only negative or non-numeric values fall back to the default.
 
@@ -28,6 +28,10 @@ Integer variables of `cmd/api` are read with one rule: a value that is not a num
 | `ANALYTICS_CONSUMER_GROUP` | none | yes | Consumer group of the service's own projector consumer (`warehouse.outbound-shipping.analytics`). |
 | `ADDR` | `:8080` | no | Listen address of the REST API. |
 | `LOG_LEVEL` | `info` | no | `debug`, `info`, `warn` (or `warning`), `error`; any other value is `info`. Case-sensitive (lower case). |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none | no | OTLP/gRPC endpoint of the Collector, `host:port` or a full URL (`https://...` keeps TLS). **Empty = telemetry off**: no SDK is installed, no metric or span is exported, and logs lose nothing but their trace ids. |
+| `OTEL_SERVICE_NAME` | `outbound-shipping` | no | `service.name` of every exported span and metric. |
+| `SERVICE_VERSION` | `dev` | no | `service.version` of every exported span and metric. |
+| `ENVIRONMENT` | `local` | no | `deployment.environment.name` of every exported span and metric. |
 | `OUTBOX_INTERVAL_MS` | `250` | no | Milliseconds the relay sleeps after a pass that did not fill a batch. |
 | `OUTBOX_BATCH` | `100` | no | Outbox rows claimed per relay pass. |
 | `OUTBOX_MAX_ATTEMPTS` | `20` | no | Failed sends after which a row is excluded from future claims (see the [runbook](/docs/operations/runbook)). `0` = unlimited (the row is retried forever); negative or non-numeric = `20`. |
@@ -46,6 +50,10 @@ The code defaults of the relay package itself (`DefaultInterval` 1 s, `DefaultMa
 | `MIGRATIONS_DATABASE_URL` | value of `DATABASE_URL` | no | Direct DSN for the boot migrations. `cmd/mcp` runs the same idempotent embedded migrations as `cmd/api` (golang-migrate's advisory lock makes concurrent starts safe). |
 | `MCP_ADDR` | `:8090` | no | Listen address of the MCP server. |
 | `LOG_LEVEL` | `info` | no | Same values as `cmd/api`. |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none | no | Same as `cmd/api`: OTLP/gRPC Collector endpoint; empty = telemetry off. |
+| `OTEL_SERVICE_NAME` | `outbound-shipping-mcp` | no | `service.name` of every exported span and metric. The default differs from `cmd/api`'s so the two binaries never share a metric series. |
+| `SERVICE_VERSION` | `dev` | no | Same as `cmd/api`. |
+| `ENVIRONMENT` | `local` | no | Same as `cmd/api`. |
 
 ## In the cluster: the Helm chart and warehouse-infra
 
@@ -54,6 +62,6 @@ The chart `charts/outbound-shipping/` renders each variable above from a dedicat
 ## What is not configurable
 
 - **No auth variables.** REST, MCP and the probes are unauthenticated; access control is the cluster network boundary.
-- **No OpenTelemetry variables.** Neither binary installs an OpenTelemetry SDK or exporter today, so `OTEL_*` variables have no effect (see [Observability](/docs/operations/observability)).
+- **No other OpenTelemetry variables.** The four above are the only ones either binary reads by name; the SDK's own `OTEL_EXPORTER_OTLP_ENDPOINT` handling applies to the endpoint, and `OTEL_RESOURCE_ATTRIBUTES` is read by the SDK's default resource (see [Observability](/docs/operations/observability)). With `OTEL_EXPORTER_OTLP_ENDPOINT` empty no SDK is installed at all.
 - **No mode toggles.** There is no `*_MODE`, no in-memory fallback (`TestRuntimeBinaryHasNoInMemoryAdapters`) and no envelope toggle: every Kafka message is a CloudEvents 1.0 structured-mode event.
 - **Kafka topics are constants,** not environment: `warehouse.outbound-shipping.events` and `warehouse.outbound-shipping.analytics` for the topics this service writes, plus the five consumed topics above. Dead-letter topics are the consumed topic plus `.dlq`.

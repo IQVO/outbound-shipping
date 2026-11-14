@@ -2,6 +2,12 @@
 # (the chart render test's everything-set case mirrors this).
 database:
   existingSecret: "outbound-shipping-db"
+environment: "ci"
+serviceVersion: "v0.0.0-ci"
+otel:
+  enabled: true
+  endpoint: "otel-collector.observability.svc.cluster.local:4317"
+  serviceName: "outbound-shipping"
 config:
   addr: ":8080"
   logLevel: "info"

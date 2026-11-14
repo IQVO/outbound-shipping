@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	inboundhttp "github.com/claudioed/outbound-shipping/internal/adapters/inbound/http"
 	outboxrelay "github.com/claudioed/outbound-shipping/internal/adapters/outbound/outbox"
 )
 
@@ -18,6 +19,11 @@ type config struct {
 	Groups      map[string]string
 	Addr        string
 	LogLevel    string
+
+	// Telemetry (OpenTelemetry). An empty OTLPEndpoint turns export off.
+	ServiceName    string
+	ServiceVersion string
+	OTLPEndpoint   string
 
 	OutboxInterval time.Duration
 	OutboxBatch    int
@@ -61,6 +67,9 @@ func loadConfig(getenv func(string) string) (config, error) {
 		DatabaseURL:      getenv("DATABASE_URL"),
 		Addr:             or("ADDR", ":8080"),
 		LogLevel:         or("LOG_LEVEL", "info"),
+		ServiceName:      or("OTEL_SERVICE_NAME", inboundhttp.DefaultServiceName),
+		ServiceVersion:   getenv("SERVICE_VERSION"),
+		OTLPEndpoint:     getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
 		OutboxInterval:   time.Duration(intOr("OUTBOX_INTERVAL_MS", 250)) * time.Millisecond,
 		OutboxBatch:      intOr("OUTBOX_BATCH", 100),
 		OutboxMaxAttempt: intAtLeast("OUTBOX_MAX_ATTEMPTS", outboxrelay.DefaultMaxAttempts, 0),

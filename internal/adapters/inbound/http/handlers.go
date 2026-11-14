@@ -69,6 +69,7 @@ func (s *Server) handleCloseLoad(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "loadId")
 	var req closeLoadRequest
 	if err := decodeJSON(r, &req); err != nil {
+		s.countLoadClose(r.Context(), err)
 		writeError(w, r, err)
 		return
 	}
@@ -77,6 +78,7 @@ func (s *Server) handleCloseLoad(w http.ResponseWriter, r *http.Request) {
 		shorts = append(shorts, shared.ShortShip{PackageID: shared.PackageID(ss.PackageID), Reason: ss.Reason})
 	}
 	load, err := s.Close.Handle(r.Context(), shared.LoadID(id), shorts)
+	s.countLoadClose(r.Context(), err)
 	if err != nil {
 		writeError(w, r, err)
 		return

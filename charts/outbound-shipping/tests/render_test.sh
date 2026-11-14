@@ -4,6 +4,9 @@
 # binaries read is the env the chart renders (and nothing else), the optional
 # mcp component stays off the default render, and no component this service
 # does not have (projector, reports, sweep, a2a, frontend, relay) is rendered.
+# Every component that runs a binary (api, mcp) also renders the OpenTelemetry
+# variables (ENVIRONMENT, SERVICE_VERSION, OTEL_EXPORTER_OTLP_ENDPOINT,
+# OTEL_SERVICE_NAME); extraEnv refuses those chart-owned names.
 # Run: bash charts/outbound-shipping/tests/render_test.sh   (needs helm)
 set -euo pipefail
 
@@ -112,10 +115,11 @@ deployments="$(grep -c '^kind: Deployment$' <<<"$render_all")"
 
 # --- chart vs binary: every env var a cmd/* binary reads is rendered ------------
 # The authoritative list is what the Go code reads: Getenv/getenv/or/intOr
-# literals in cmd/*, the groupVars table of cmd/api/config.go and the Env*
+# literals in cmd/* (cmd/*/telemetry.go and cmd/api/config.go included) and in
+# the telemetry adapter (ENVIRONMENT), the groupVars table of cmd/api/config.go and the Env*
 # constants of the postgres adapter (migrations DSN). The everything-set render
 # must carry each one, and carry NO other variable (nothing invented).
-code_vars="$( { grep -rhoE --include='*.go' --exclude='*_test.go' '(Getenv|getenv|or|intOr|intAtLeast)\("[A-Z][A-Z0-9_]+"' "$repo_dir/cmd" \
+code_vars="$( { grep -rhoE --include='*.go' --exclude='*_test.go' '(Getenv|getenv|or|intOr|intAtLeast)\("[A-Z][A-Z0-9_]+"' "$repo_dir/cmd" "$repo_dir/internal/adapters/outbound/telemetry" \
     | sed -E 's/.*\("([A-Z0-9_]+)"/\1/'
   sed -n '/^var groupVars/,/^}/p' "$repo_dir/cmd/api/config.go" | grep -oE '"[A-Z][A-Z0-9_]+_CONSUMER_GROUP"' | tr -d '"'
   grep -hoE 'Env[A-Za-z]+ += "[A-Z][A-Z0-9_]+"' "$repo_dir/internal/adapters/outbound/postgres/migrate.go" | sed -E 's/.*"([A-Z0-9_]+)"/\1/'
@@ -151,6 +155,67 @@ for kv in fulfillmentConsumerGroup:FULFILLMENT dockConsumerGroup:DOCK yardConsum
   cptConsumerGroup:CPT layoutConsumerGroup:LAYOUT analyticsConsumerGroup:ANALYTICS; do
   expect_refusal "an empty config.${kv%%:*}" "config.${kv%%:*}" "${db[@]}" "${brokers[@]}" --set "config.${kv%%:*}="
   expect_refusal "an empty config.${kv%%:*} names its variable" "${kv#*:}_CONSUMER_GROUP" "${db[@]}" "${brokers[@]}" --set "config.${kv%%:*}="
+done
+
+# --- every env var the Go code reads is in the documented env table ------------
+# docs/docs/operations/configuration.md is the one place the variables are
+# documented; its tables and the code must name the same set.
+config_doc="$repo_dir/docs/docs/operations/configuration.md"
+for var in $code_vars; do
+  grep -qF "| \`$var\` |" "$config_doc" || fail "$var is read by a binary but is not in the env table of docs/docs/operations/configuration.md"
+done
+documented_vars="$(grep -oE '^\| `[A-Z][A-Z0-9_]+` \|' "$config_doc" | sed -E 's/^\| `([A-Z0-9_]+)` \|/\1/' | sort -u)"
+[[ "$(grep -c . <<<"$documented_vars")" == "$n_code_vars" ]] \
+  || fail "the configuration.md env table names $(grep -c . <<<"$documented_vars") variables, the Go code reads $n_code_vars"
+
+# --- OpenTelemetry: every component that runs a binary renders the same four --
+# ENVIRONMENT and SERVICE_VERSION always; OTEL_EXPORTER_OTLP_ENDPOINT and
+# OTEL_SERVICE_NAME while otel.enabled (the default). The mcp service.name
+# carries a -mcp suffix so the two Deployments never share a metric series.
+mcp_base=("${base[@]}" --set mcp.enabled=true)
+api_otel="$(render "${base[@]}" --show-only templates/deployment.yaml)"
+mcp_otel="$(render "${mcp_base[@]}" --show-only templates/mcp-deployment.yaml)"
+for doc_name in api_otel mcp_otel; do
+  doc="${!doc_name}"
+  [[ "$(env_value "$doc" ENVIRONMENT)" == "local" ]] || fail "$doc_name: ENVIRONMENT must default to local"
+  [[ "$(env_value "$doc" SERVICE_VERSION)" == "local" ]] || fail "$doc_name: SERVICE_VERSION must fall back to image.tag"
+  [[ "$(env_value "$doc" OTEL_EXPORTER_OTLP_ENDPOINT)" == "otel-collector.observability.svc.cluster.local:4317" ]] \
+    || fail "$doc_name: OTEL_EXPORTER_OTLP_ENDPOINT must come from otel.endpoint"
+done
+[[ "$(env_value "$api_otel" OTEL_SERVICE_NAME)" == "outbound-shipping" ]] || fail "the api OTEL_SERVICE_NAME must be otel.serviceName"
+[[ "$(env_value "$mcp_otel" OTEL_SERVICE_NAME)" == "outbound-shipping-mcp" ]] || fail "the mcp OTEL_SERVICE_NAME must be otel.serviceName + -mcp"
+tuned_otel=(--set environment=staging --set serviceVersion=v9.9.9 --set otel.endpoint=collector.example:4317 --set otel.serviceName=svc)
+for template in deployment.yaml mcp-deployment.yaml; do
+  doc="$(render "${mcp_base[@]}" "${tuned_otel[@]}" --show-only "templates/$template")"
+  [[ "$(env_value "$doc" ENVIRONMENT)" == "staging" ]] || fail "$template: environment is not rendered into ENVIRONMENT"
+  [[ "$(env_value "$doc" SERVICE_VERSION)" == "v9.9.9" ]] || fail "$template: serviceVersion is not rendered into SERVICE_VERSION"
+  [[ "$(env_value "$doc" OTEL_EXPORTER_OTLP_ENDPOINT)" == "collector.example:4317" ]] || fail "$template: otel.endpoint is not rendered"
+done
+appversion="$(awk -F'"' '/^appVersion:/ {print $2}' "$chart_dir/Chart.yaml")"
+[[ -n "$appversion" ]] || fail "could not read appVersion from Chart.yaml"
+for template in deployment.yaml mcp-deployment.yaml; do
+  doc="$(render "${mcp_base[@]}" --set image.tag= --show-only "templates/$template")"
+  [[ "$(env_value "$doc" SERVICE_VERSION)" == "$appversion" ]] || fail "$template: SERVICE_VERSION must fall back to the chart appVersion ($appversion) when image.tag is empty"
+done
+for template in deployment.yaml mcp-deployment.yaml; do
+  doc="$(render "${mcp_base[@]}" --set otel.enabled=false --show-only "templates/$template")"
+  if grep -q 'name: OTEL_' <<<"$doc"; then fail "$template: otel.enabled=false must render no OTEL_* variable"; fi
+  grep -q 'name: ENVIRONMENT$' <<<"$doc" || fail "$template: ENVIRONMENT is rendered whether or not otel is enabled"
+  grep -q 'name: SERVICE_VERSION$' <<<"$doc" || fail "$template: SERVICE_VERSION is rendered whether or not otel is enabled"
+done
+expect_refusal "otel enabled without an endpoint" "otel.endpoint" "${db[@]}" "${brokers[@]}" --set otel.endpoint=
+expect_refusal "otel enabled without a service name" "otel.serviceName" "${db[@]}" "${brokers[@]}" --set otel.serviceName=
+for owned in OTEL_EXPORTER_OTLP_ENDPOINT OTEL_SERVICE_NAME SERVICE_VERSION ENVIRONMENT; do
+  expect_refusal "$owned in extraEnv" "extraEnv sets $owned" "${db[@]}" "${brokers[@]}" \
+    --set "extraEnv[0].name=$owned" --set "extraEnv[0].value=x"
+  expect_refusal "$owned in mcp.extraEnv" "mcp.extraEnv sets $owned" "${db[@]}" "${brokers[@]}" \
+    --set "mcp.extraEnv[0].name=$owned" --set "mcp.extraEnv[0].value=x"
+done
+render "${base[@]}" --set 'extraEnv[0].name=SOME_OTHER_VAR' --set 'extraEnv[0].value=x' >/dev/null \
+  || fail "an unrelated extraEnv entry must still render"
+for doc_name in api_otel mcp_otel; do
+  dups="$(grep -E '^ {12}- name: ' <<<"${!doc_name}" | sort | uniq -d)"
+  [[ -z "$dups" ]] || fail "$doc_name renders duplicate env entries: $dups"
 done
 
 # --- pod hardening and shutdown room (docs/docs/operations/before-first-release.md row 7)
