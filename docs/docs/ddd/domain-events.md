@@ -23,7 +23,7 @@ Every published event is also written to the analytics twin under the same Cloud
 | `LoadClosed` | `...outboundload.LoadClosed` | `OutboundLoad.CloseLoad` | the supervisor closes the load | yard-management (intended) |
 | `LoadReopened` | `...outboundload.LoadReopened` | `OutboundLoad.ReopenLoad` | the supervisor reopens a closed load | yard-management (intended) |
 | `LoadCancelled` | `...outboundload.LoadCancelled` | `OutboundLoad.CancelLoad` | the supervisor cancels a planned load | analytics only |
-| `ShipmentConfirmed` | `...outboundload.ShipmentConfirmed` | `OutboundLoad.ConfirmShipment` | `TrailerDeparted` for a `CLOSED` load | order-management; network-fulfillment (intended) |
+| `ShipmentConfirmed` | `...outboundload.ShipmentConfirmed` | `OutboundLoad.ConfirmShipment` | `TrailerDeparted` for a `CLOSED` load | order-management; network-fulfillment (consumer built on its `develop`, not yet running) |
 | `PackageStaged` | `...shippingpackage.PackageStaged` | `ShippingPackage.Stage` | a staging scan | analytics only |
 | `PackageLoaded` | `...shippingpackage.PackageLoaded` | `ShippingPackage.Load` | a loading scan | analytics only |
 | `PackageUnloaded` | `...shippingpackage.PackageUnloaded` | `ShippingPackage.Unload` | an unload scan | analytics only |
@@ -31,7 +31,7 @@ Every published event is also written to the analytics twin under the same Cloud
 | `BillOfLadingIssued` | `...billoflading.BillOfLadingIssued` | `BillOfLading.Issue` | the ship confirmation | analytics only |
 | `BillOfLadingVoided` | `...billoflading.BillOfLadingVoided` | `BillOfLading.Void` | the supervisor voids the document | analytics only |
 
-"Intended" means [ADR 0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue) names the consumer but the consumer has no handler on its `develop` (see [Integration](/docs/ecosystem/integration)).
+"Intended" means [ADR 0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue) names the consumer but the consumer has no handler on its `develop`; only yard-management is in that state. network-fulfillment's handler exists on its `develop` but the running pod predates it (see [Integration](/docs/ecosystem/integration)).
 
 State changes that raise **no** event: assigning a package to a load, `AttachTrailer`, `MarkShipped`, `MarkShortShipped`. The facts reach the outside through `LoadClosed.short_shipped_count` and `ShipmentConfirmed`.
 

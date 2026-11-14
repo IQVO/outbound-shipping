@@ -51,7 +51,7 @@ Both published streams are written by the same outbox in the same transaction, t
 | `outboundload.LoadClosed` | every package is loaded or short-shipped | `load_id, site_id, door_code, trailer_id, package_count, short_shipped_count, closed_at, version` | yard-management (intended, not implemented) |
 | `outboundload.LoadReopened` | a supervisor reopens a closed load | `load_id, site_id, reopened_at, version` | yard-management (intended, not implemented) |
 | `outboundload.LoadCancelled` | a planned load is cancelled | `load_id, site_id, cancelled_at, version` | analytics only |
-| `outboundload.ShipmentConfirmed` | `TrailerDeparted` arrives for a `CLOSED` load | `load_id, site_id, cpt_id, carrier, trailer_id, seal_number, departed_at, orders:[{order_id}], version` | order-management; network-fulfillment (intended, not implemented) |
+| `outboundload.ShipmentConfirmed` | `TrailerDeparted` arrives for a `CLOSED` load | `load_id, site_id, cpt_id, carrier, trailer_id, seal_number, departed_at, orders:[{order_id}], version` | order-management; network-fulfillment (consumer built on its `develop`, not yet running) |
 | `shippingpackage.PackageStaged` | a package is staged | `package_id, load_id, site_id, staging_location, staged_at, version` | analytics only |
 | `shippingpackage.PackageLoaded` | a package is loaded through its load's door | `package_id, load_id, site_id, loaded_at, version` | analytics only |
 | `shippingpackage.PackageUnloaded` | a loaded package is taken back off | `package_id, load_id, site_id, unloaded_at, reason (optional), version` | analytics only |
