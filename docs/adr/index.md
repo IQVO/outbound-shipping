@@ -21,3 +21,4 @@ immutable; a changed decision gets a new ADR that supersedes the old one. The
 | [0005](/docs/adr/0005-cloudevents-envelope-and-type-catalogue) | CloudEvents envelope and type catalogue | Accepted (2026-11-06) |
 | [0006](/docs/adr/0006-yard-contract-pinned) | The yard-management contract is pinned and tested | Accepted (2026-11-09). Refines ADR 0002 and ADR 0005 (the yard rows of the consumed catalogue). |
 | [0007](/docs/adr/0007-dock-scheduling-contract-pinned) | The dock-scheduling contract is pinned and tested | Accepted (2026-11-10). Completes ADR 0006. |
+| [0008](/docs/adr/0008-adopt-the-fleet-observability-standard) | Adopt the fleet observability standard (OpenTelemetry Tier 1 and one Tier 2 counter) | Accepted (2026-11-13). Applies the fleet's standard metrics convention. |

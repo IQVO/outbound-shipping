@@ -19,11 +19,16 @@
 //	MIGRATIONS_DATABASE_URL   direct DSN for the boot migrations (default DATABASE_URL)
 //	MCP_ADDR                  listen address (default :8090)
 //	LOG_LEVEL                 debug | info | warn (or warning) | error (default info)
+//	OTEL_EXPORTER_OTLP_ENDPOINT  OTLP/gRPC Collector (host:port or URL); empty = telemetry off
+//	OTEL_SERVICE_NAME         service.name of spans and metrics (default outbound-shipping-mcp)
+//	SERVICE_VERSION           service.version (default dev)
+//	ENVIRONMENT               deployment.environment.name (default local)
 package main
 
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -32,6 +37,7 @@ import (
 	inboundmcp "github.com/claudioed/outbound-shipping/internal/adapters/inbound/mcp"
 	"github.com/claudioed/outbound-shipping/internal/adapters/outbound/postgres"
 	"github.com/claudioed/outbound-shipping/internal/adapters/outbound/system"
+	"github.com/claudioed/outbound-shipping/internal/adapters/outbound/telemetry"
 	"github.com/claudioed/outbound-shipping/internal/application/usecases"
 )
 
@@ -52,6 +58,15 @@ func run() error {
 	logger := newLogger(os.Getenv("LOG_LEVEL"))
 	slog.SetDefault(logger)
 
+	// Telemetry is flushed LAST (deferred first): the drain's final spans
+	// and metrics still make it out.
+	serviceName, serviceVersion, otlpEndpoint := telemetryEnv(os.Getenv)
+	flushTelemetry, err := startTelemetry(logger, serviceName, serviceVersion, otlpEndpoint)
+	if err != nil {
+		return err
+	}
+	defer flushTelemetry()
+
 	databaseURL := os.Getenv("DATABASE_URL")
 	deps, closeAdapters, err := buildDeps(databaseURL)
 	if err != nil {
@@ -61,7 +76,7 @@ func run() error {
 
 	srv := &http.Server{
 		Addr:              addrOr(os.Getenv("MCP_ADDR")),
-		Handler:           newRouter(inboundmcp.Handler(inboundmcp.NewServer(deps))),
+		Handler:           newRouter(inboundmcp.Handler(inboundmcp.NewServer(deps)), logger, serviceName),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	return serveMCP(logger, srv)
@@ -104,8 +119,14 @@ func addrOr(addr string) string {
 	return addr
 }
 
-// newLogger maps LOG_LEVEL onto slog levels; unknown values mean info.
+// newLogger maps LOG_LEVEL onto slog levels; unknown values mean info. The
+// JSON handler is wrapped so every record written with a context that carries
+// a span (the *Context logger variants) gets trace_id and span_id.
 func newLogger(level string) *slog.Logger {
+	return newLoggerTo(os.Stdout, level)
+}
+
+func newLoggerTo(w io.Writer, level string) *slog.Logger {
 	var lv slog.Level
 	switch level {
 	case "debug":
@@ -117,5 +138,5 @@ func newLogger(level string) *slog.Logger {
 	default:
 		lv = slog.LevelInfo
 	}
-	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: lv}))
+	return slog.New(telemetry.WithTraceContext(slog.NewJSONHandler(w, &slog.HandlerOptions{Level: lv})))
 }

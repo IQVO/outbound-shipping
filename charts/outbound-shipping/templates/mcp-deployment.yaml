@@ -38,10 +38,12 @@ spec:
               containerPort: {{ .Values.mcp.service.targetPort }}
               protocol: TCP
           # Env contract verified against cmd/mcp/main.go: MCP_ADDR,
-          # LOG_LEVEL, DATABASE_URL and (migration step only)
-          # MIGRATIONS_DATABASE_URL. cmd/mcp is read-only: no auth env, no
-          # outbox relay, no consumer, and it never dials Kafka, so it reads
-          # neither KAFKA_BROKERS nor any consumer group.
+          # LOG_LEVEL, DATABASE_URL, (migration step only)
+          # MIGRATIONS_DATABASE_URL and the OpenTelemetry variables
+          # (cmd/mcp/telemetry.go, internal/adapters/outbound/telemetry).
+          # cmd/mcp is read-only: no auth env, no outbox relay, no consumer,
+          # and it never dials Kafka, so it reads neither KAFKA_BROKERS nor
+          # any consumer group.
           env:
             - name: MCP_ADDR
               value: {{ .Values.mcp.httpAddr | quote }}
@@ -62,6 +64,9 @@ spec:
                   key: {{ .Values.database.migrationsExistingSecretKey }}
                   optional: true
             {{- end }}
+            # OpenTelemetry, same variables as the api; service.name carries
+            # the -mcp suffix so the two Deployments never share a series.
+            {{- include "outbound-shipping.telemetryEnv" (dict "root" . "suffix" "-mcp") | nindent 12 }}
             {{- range .Values.mcp.extraEnv }}
             - {{ toYaml . | nindent 14 | trim }}
             {{- end }}

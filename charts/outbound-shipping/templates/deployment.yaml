@@ -112,6 +112,10 @@ spec:
             # /readyz.
             - name: KAFKA_BROKERS
               value: {{ .Values.kafka.brokers | quote }}
+            # OpenTelemetry: ENVIRONMENT and SERVICE_VERSION always,
+            # OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_SERVICE_NAME while
+            # otel.enabled. Chart-owned: extraEnv may not set them.
+            {{- include "outbound-shipping.telemetryEnv" (dict "root" . "suffix" "") | nindent 12 }}
             {{- range .Values.extraEnv }}
             - {{ toYaml . | nindent 14 | trim }}
             {{- end }}

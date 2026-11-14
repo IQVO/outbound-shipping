@@ -24,7 +24,7 @@ the ship-confirm that follows the trailer's physical departure (`yard-management
 The apply and what running looks like are in the runbook and in
 `docs/docs/operations/before-first-release.md` (every checklist row done).
 It owns `OutboundLoad`, `ShippingPackage` and `BillOfLading` (see `docs/adr/`, ADRs
-0001 to 0006). Binaries: `cmd/api` (REST, six Kafka consumers, outbox relay) and
+0001 to 0008). Binaries: `cmd/api` (REST, six Kafka consumers, outbox relay) and
 `cmd/mcp` (read-only MCP).
 
 Runtime: Go, hexagonal, real PostgreSQL and Kafka only (`DATABASE_URL`,
@@ -43,7 +43,7 @@ The documentation site of this service is published at <https://iqvo.github.io/o
 | [Quickstart](docs/docs/overview/quickstart.md) | Prerequisites, make targets, booting, first calls |
 | [Configuration](docs/docs/operations/configuration.md) | Every environment variable of `cmd/api` and `cmd/mcp` |
 | [Runbook](docs/docs/operations/runbook.md) | Deployment status, probes, migrations, Kafka, outbox relay, dead letters |
-| [Observability](docs/docs/operations/observability.md) | Logs, probes, SQL signals, what does not exist yet |
+| [Observability](docs/docs/operations/observability.md) | OpenTelemetry signals, logs, probes, SQL signals, what is not instrumented yet |
 | [Troubleshooting](docs/docs/operations/troubleshooting.md) | Symptom, cause, check, fix |
 | [Before the first release](docs/docs/operations/before-first-release.md) | Packaging checklist and its state |
 | [Testing](docs/docs/development/testing.md) | Test pyramid, make targets, CI jobs |
@@ -65,4 +65,17 @@ The documentation site of this service is published at <https://iqvo.github.io/o
 | [API overview](docs/docs/api-reference/overview.md) | Interfaces, endpoint table, contract conventions |
 | [Events](docs/docs/api-reference/events.md) | The event catalogue |
 | [MCP tools](docs/docs/mcp/tools.md) | The read-only MCP tools, resource and prompt |
-| [ADRs](docs/adr/index.md) | Architecture decision records 0001 to 0006 |
+| [ADRs](docs/adr/index.md) | Architecture decision records 0001 to 0008 |
+
+## Observability
+
+Both binaries export OpenTelemetry traces and metrics over OTLP/gRPC when `OTEL_EXPORTER_OTLP_ENDPOINT` is set (empty means telemetry off), write JSON logs whose records carry `trace_id` and `span_id` while a span is active, and keep `GET /healthz` unchanged ([ADR 0008](docs/adr/0008-adopt-the-fleet-observability-standard.md)).
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | none (telemetry off) | OTLP/gRPC Collector, `host:port` or URL |
+| `OTEL_SERVICE_NAME` | `outbound-shipping` (`cmd/api`), `outbound-shipping-mcp` (`cmd/mcp`) | `service.name` |
+| `SERVICE_VERSION` | `dev` | `service.version` |
+| `ENVIRONMENT` | `local` | `deployment.environment.name` |
+
+Exported: `http.server.request.duration` and `http.server.active_requests` on the REST and MCP routers, the Go runtime instruments, one server span per request named after the route pattern, and the business counter `outbound.loads.closures` (`outcome` = `closed` or `failed`, `reason` = the problem slug on failure). Consumer lag, outbox depth and dead-letter rate are not instrumented yet. Details and the full variable list: [Observability](docs/docs/operations/observability.md), [Configuration](docs/docs/operations/configuration.md).
