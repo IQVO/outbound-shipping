@@ -23,7 +23,7 @@ Seventeen use cases live in `internal/application/usecases`: eight REST commands
 
 | Error | HTTP | Slug |
 |---|---|---|
-| malformed body, bad parameter, unknown query parameter, `ErrInvalidListQuery`, `ErrCancelReasonRequired`, `ErrRequiredField`, `ErrNoTimestamp`, `ErrVoidReasonRequired` | 400 | `bad-request`, `invalid-parameter`, `unknown-query-parameter` |
+| malformed body, bad parameter, unknown query parameter, `ErrInvalidListQuery`, `ErrCancelReasonRequired`, `ErrRequiredField`, `ErrNoTimestamp`, `ErrVoidReasonRequired`, a short-ship entry without a package or a reason (`shared.ErrShortShipReasonRequired`, `ErrShortShipPackageRequired`, `shippingpackage.ErrShortShipReasonRequired`, `outboundload.ErrInvalidShortShip`) | 400 | `bad-request`, `invalid-parameter`, `unknown-query-parameter` |
 | missing / reused `Idempotency-Key` | 400 / 409 | `idempotency-key-required` / `idempotency-key-reused` |
 | `shippingpackage.ErrNotStagingLocation` | 422 | `not-staging-location` |
 | `shippingpackage.ErrWrongLoad` | 409 | `wrong-load` |
@@ -72,8 +72,8 @@ Seventeen use cases live in `internal/application/usecases`: eight REST commands
 ### CloseLoad: `POST /loads/{loadId}/closures`
 
 - **Trigger:** a dock supervisor closes the load.
-- **Inputs:** body `{"short_ships": [{"package_id", "reason"}]}` (optional list; each entry needs both fields).
-- **Flow:** mark each commanded short-ship `SHORT_SHIPPED` first, then collect the packages still outstanding. A package already short-shipped by the diversion policy is recorded once with reason `DIVERTED`.
+- **Inputs:** body `{"short_ships": [{"package_id", "reason"}]}` (optional list; each entry needs both fields, otherwise `400 bad-request` before any package is touched).
+- **Flow:** mark each commanded short-ship `SHORT_SHIPPED` first, then collect the packages still outstanding. A package already short-shipped by the diversion policy that the command does not name is recorded once with reason `DIVERTED`; one the command does name is recorded once with the reason the operator gave (the operator's entry wins, [ADR 0010](/docs/adr/0010-spec-rulings-from-the-bdd-wave)).
 - **Invariants:** the load must be `LOADING`; no package may be neither loaded nor short-shipped (`ErrPackagesOutstanding`); an unknown package in `short_ships` is `package-not-found`.
 - **Raises:** `LoadClosed` (`package_count` = loaded packages, `short_shipped_count`).
 
@@ -87,7 +87,7 @@ Seventeen use cases live in `internal/application/usecases`: eight REST commands
 
 - **Trigger:** a supervisor cancels a planned load.
 - **Inputs:** body `{"reason"}` (required).
-- **Invariants:** `PLANNED` only; a load that already has packages assigned refuses `ErrLoadHasPackages` (short-ship and close instead).
+- **Invariants:** the aggregate names the state refusals first: a `SHIP_CONFIRMED` load is `409 load-confirmed` (`ErrLoadConfirmed`), a `LOADING`, `CLOSED` or `CANCELLED` load is `409 load-state` (`ErrInvalidTransition`). Only a `PLANNED` load goes on: if it already has packages assigned it refuses `ErrLoadHasPackages` (`409 load-has-packages`: short-ship and close instead).
 - **Raises:** `LoadCancelled`.
 
 ### VoidBillOfLading: `POST /bills-of-lading/{bolNumber}/voids`
@@ -168,9 +168,9 @@ Folds `LoadPlanned`, `PackageStaged`, `PackageLoaded`, `PackageMissedLoad`, `Loa
 
 | Query | Served by | Notes |
 |---|---|---|
-| `GetLoad`, `ListLoads` | `GET /loads/{loadId}`, `GET /loads`; MCP resource `warehouse://outbound-shipping/loads/{loadId}` | keyset pagination, `limit` 1 to 200 (default 50) |
-| `GetPackage`, `ListLoadPackages` | `GET /loads/{loadId}/packages` | filter by package state |
+| `GetLoad`, `ListLoads` | `GET /loads/{loadId}`, `GET /loads`; MCP resource `warehouse://outbound-shipping/loads/{loadId}` | keyset pagination, `limit` 1 to 200 (default 50); `nextCursor` is `null` on the last page, also when that page is exactly full (the query reads one row past the page) |
+| `GetPackage`, `ListLoadPackages` | `GET /loads/{loadId}/packages` | filter by package state; same cursor rule |
 | `GetBillOfLading` | `GET /bills-of-lading/{bolNumber}` | |
-| `AdherenceReport` | `GET /reports/load-adherence` | reads `load_board`; `adherence` = `loads_closed / loads_total` |
+| `AdherenceReport` | `GET /reports/load-adherence` | reads `load_board`; `adherence` = `loads_closed / loads_total`; `loads_closed` counts every load that has closed, on time or late ([ADR 0010](/docs/adr/0010-spec-rulings-from-the-bdd-wave)) |
 | `LoadsAtRisk` | MCP `loads_at_risk` | open loads whose cutoff is within the horizon (default 4 h) |
 | `MissedLoads` | MCP `missed_loads` | packages that raised `PackageMissedLoad`, newest first |

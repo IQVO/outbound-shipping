@@ -36,15 +36,16 @@ Every error is `application/problem+json` with `type` `https://errors.outbound-s
 
 | Status and slug | Cause | Fix |
 |---|---|---|
-| `400 idempotency-key-required` | a POST without `Idempotency-Key` | Send the header (spec: 16 to 128 characters; the code enforces 128 at most). |
+| `400 idempotency-key-required` | a POST without `Idempotency-Key`, or with one longer than 128 characters | Send the header: 1 to 128 characters, the fleet bound ([ADR 0010](/docs/adr/0010-spec-rulings-from-the-bdd-wave)). |
 | `409 idempotency-key-reused` | the key was used with another method, path or body | Use a new key for a new request. A replay of the same request returns the stored answer with `Idempotency-Replayed: true`. |
 | `400 unknown-query-parameter` | a query parameter the route does not declare | Remove it. `GET /loads` takes `site_id`, `state`, `operating_date`, `limit`, `cursor`. |
 | `422 not-staging-location` | the location is not a `Staging` location of the package's own site, or the layout copy has no such location yet (`zones` and `locations` come from `warehouse.facility.events`) | `SELECT l.location_code, l.role, z.site_code FROM locations l LEFT JOIN zones z USING (zone_id) WHERE l.location_code = ...`. An empty `role` means Storage and never stages. |
 | `409 wrong-load` | the package is on another load, has no load, or the door scanned is not the load's door (a load with no door assigned refuses every loading) | `GET /loads/{id}` for `door_code`; check the package's `load_id` | Scan through the load's door; fix the door assignment if it is empty. |
 | `409 package-state` / `409 already-shipped` | the scan is not allowed from the package's state; a shipped package cannot be unloaded | `GET /loads/{id}/packages?state=...` | none for `already-shipped`: the truck has left. |
 | `409 packages-outstanding` | a package of the load is neither loaded nor short-shipped | list the load's packages in `EXPECTED` or `STAGED` | Load them, or close with `short_ships` naming each with a reason. |
-| `409 load-state`, `load-not-closed`, `load-confirmed` | the command does not fit the load's state; a `SHIP_CONFIRMED` load never changes | `GET /loads/{id}` | none; confirmation is final. Void the bill of lading if it was wrong; the shipment is not undone. |
-| `409 load-has-packages` | cancelling a load that already has packages | | Short-ship the packages and close instead. |
+| `409 load-state`, `load-not-closed`, `load-confirmed` | the command does not fit the load's state (a cancel of a `LOADING` or `CLOSED` load is `load-state`); a `SHIP_CONFIRMED` load never changes, whatever the command, a cancel included (`load-confirmed`) | `GET /loads/{id}` | none; confirmation is final. Void the bill of lading if it was wrong; the shipment is not undone. |
+| `409 load-has-packages` | cancelling a `PLANNED` load that already has packages (a `LOADING` load answers `load-state`) | | Short-ship the packages and close instead. |
+| `400 bad-request` on a close | a `short_ships` entry without a `package_id` or a `reason` | | Send both fields for every entry; nothing was changed. |
 | `409 concurrent-modification` | optimistic-lock failure (`WHERE version = ...` matched no row) | re-read and retry | Retry with a new `Idempotency-Key`; the same key replays the stored 409. |
 | `404 load-not-found`, `package-not-found`, `bol-not-found` | unknown id | | Packages exist only after a manifest was applied. |
 
@@ -84,4 +85,4 @@ Status: **known gap, behaviour planned and deliberately not implemented yet.** `
 - **Cancel and reschedule:** this service consumes only `DockAppointmentBooked`; dock-scheduling's cancel/reschedule events are not consumed, so a copy can be stale and a door assigned from it would stay assigned.
 - **Where to trigger it:** on load planning (`ExpectPackage`), when it expects a package, or on a sweep; each differs in which `LoadDoorAssigned` events are raised and when.
 
-Until an ADR picks the rule the operator workaround above stays. This page and [use cases](/docs/ddd/use-cases) are the places to update when it lands.
+Until an ADR picks the rule the operator workaround above stays ([ADR 0011](/docs/adr/0011-door-for-an-appointment-booked-before-its-load) proposes one and is not yet accepted). This page and [use cases](/docs/ddd/use-cases) are the places to update when it lands.

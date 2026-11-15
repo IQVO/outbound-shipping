@@ -194,7 +194,10 @@ paths:
         assigned package is loaded or short-shipped with a reason: any
         package still outstanding is `409 packages-outstanding`
         (`ErrPackagesOutstanding`). Short-ships are recorded in the same
-        command, each with its reason.
+        command, each with its reason; an entry without a `package_id` or a
+        `reason` is `400 bad-request` and nothing is changed. A package the
+        diversion policy already short-shipped is recorded once: with the
+        reason of the entry that names it, else `DIVERTED`.
       tags: [Loads]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -272,7 +275,10 @@ paths:
         Only a `PLANNED` load can be cancelled — a load already `LOADING`
         must be resolved instead (short-ship and close, or reopen later): the
         refusal is `409 load-state` (`ErrInvalidTransition`). A
-        `SHIP_CONFIRMED` load refuses with `409 load-confirmed`.
+        `SHIP_CONFIRMED` load refuses with `409 load-confirmed`. The load's
+        state is checked before its packages: only a `PLANNED` load that
+        already has packages assigned refuses with `409 load-has-packages`
+        (short-ship and close instead).
       tags: [Loads]
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -348,7 +354,8 @@ paths:
         Loads newest-first by creation, filtered by `site_id`, `state` and
         `operating_date`. Keyset pagination (fleet guideline R7): pass the
         `nextCursor` of the previous page; `limit` defaults to 50 and is
-        capped at 200.
+        capped at 200. `nextCursor` is `null` on the last page, also when
+        that page is exactly `limit` long.
       tags: [Loads]
       parameters:
         - $ref: '#/components/parameters/SiteIdQuery'
@@ -552,9 +559,11 @@ components:
         Caller-minted key (fleet guideline R3-R5). First use executes; a
         replay returns the stored response with `Idempotency-Replayed: true`;
         a key reused with a different body is `409 idempotency-key-reused`.
+        A key of 1 to 128 characters is accepted (the fleet bound); a missing
+        or longer one is `400 idempotency-key-required`.
       schema:
         type: string
-        minLength: 16
+        minLength: 1
         maxLength: 128
         examples: [stage-pkg-1029-20261106-req-01]
     SiteIdQuery:
@@ -650,7 +659,8 @@ components:
       description: |
         Load refusal: `packages-outstanding`, `trailer-not-docked`,
         `load-not-closed`, `load-confirmed`, `duplicate-open-load`,
-        `load-state`, or `idempotency-key-reused`.
+        `load-state`, `load-has-packages` (cancel of a `PLANNED` load that
+        has packages), or `idempotency-key-reused`.
       content:
         application/problem+json:
           schema:
@@ -975,7 +985,7 @@ components:
         loads_closed:
           type: integer
           minimum: 0
-          description: Loads closed at or before their cutoff.
+          description: Loads that have closed (CLOSED or later), whether before or after their cutoff. The board also stores closed_on_time, which this report does not use.
         loads_total:
           type: integer
           minimum: 0
