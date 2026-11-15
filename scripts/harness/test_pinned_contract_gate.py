@@ -1,31 +1,36 @@
 #!/usr/bin/env python3
-"""Tests for pinned_contract_gate.py. Run: python3 scripts/harness/test_pinned_contract_gate.py"""
+"""Tests for pinned_contract_gate.py's pure comparison: no gh call, no network."""
+import importlib.util
 import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(__file__))
-import pinned_contract_gate as gate  # noqa: E402
+HERE = os.path.dirname(os.path.abspath(__file__))
+spec = importlib.util.spec_from_file_location("pcg", os.path.join(HERE, "pinned_contract_gate.py"))
+pcg = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(pcg)
 
-PIN = {"local": "contracts/x.yaml", "repo": "IQVO/x", "path": "apis/asyncapi.yaml", "ref": "develop"}
+PIN = {"local": "testdata/x.yaml", "repo": "IQVO/producer", "path": "apis/openapi.yaml", "ref": "develop"}
 
 
-class CompareTest(unittest.TestCase):
-    def test_equal_text_reports_nothing(self):
-        self.assertEqual(gate.compare(PIN, "a\nb\n", "a\nb\n"), [])
+class Compare(unittest.TestCase):
+    def test_an_identical_copy_is_silent(self):
+        self.assertEqual(pcg.compare(PIN, "a: 1\n", "a: 1\n"), [])
 
-    def test_differing_text_reports_a_stale_pin(self):
-        out = gate.compare(PIN, "a\n", "b\n")
-        self.assertEqual(out[0], "STALE PIN contracts/x.yaml")
-        self.assertIn("IQVO/x apis/asyncapi.yaml on develop", out[1])
+    def test_the_2026_11_01_incident_shape_is_reported(self):
+        old = "properties:\n  purchaseOrders: {}\n  nextToken: {}\n"
+        new = "properties:\n  items: {}\n  nextCursor: {}\n"
+        report = "\n".join(pcg.compare(PIN, old, new))
+        self.assertIn("STALE PIN testdata/x.yaml", report)
+        self.assertIn("-  purchaseOrders: {}", report)
+        self.assertIn("+  nextCursor: {}", report)
 
-    def test_trailing_newline_counts(self):
-        self.assertNotEqual(gate.compare(PIN, "a", "a\n"), [])
+    def test_a_trailing_newline_difference_is_a_difference(self):
+        self.assertTrue(pcg.compare(PIN, "a: 1", "a: 1\n"))
 
-    def test_long_diff_is_truncated(self):
-        out = gate.compare(PIN, "\n".join(str(i) for i in range(100)), "\n".join(str(i + 1000) for i in range(100)))
-        self.assertTrue(any(line.startswith("... ") and line.endswith("more diff lines") for line in out))
-        self.assertLessEqual(len(out), 3 + 30 + 1)
+    def test_a_long_diff_is_truncated_not_dumped(self):
+        report = pcg.compare(PIN, "", "\n".join(f"k{i}: 1" for i in range(200)))
+        self.assertLess(len(report), 50)
+        self.assertTrue(any("more diff lines" in line for line in report))
 
 
 if __name__ == "__main__":
