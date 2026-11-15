@@ -16,17 +16,33 @@ Source: `Makefile`, `.github/workflows/ci.yml`, `.gremlins.yaml`, `features/`, `
 | Domain unit | `internal/domain/{outboundload,shippingpackage,billoflading,shared}` | 70 test functions | nothing | Invariants, transitions, rehydration validation, short-ship validity. Pure Go, no I/O. |
 | Use-case unit | `internal/application/usecases/*_test.go` | 44 | nothing | The consumer policies and REST commands over the in-memory doubles (`internal/adapters/outbound/memory`): expect, scan, load commands, on-departure, edges, projector, queries. |
 | Adapter unit | `internal/adapters/kafka/cloudevents`, `internal/adapters/outbound/kafka` | 8 | nothing | CloudEvents build and decode, writer settings. |
-| BDD (godog) | `features/ship_confirm_on_departure.feature`, runner `features/features_test.go` (`TestFeatures`) | 1 feature file, **6 scenarios** | nothing | Drives the same use cases `cmd/api` wires, over the in-memory doubles, with an outbox recorder standing in for the relay. Strict mode. |
+| BDD (godog) | `features/*.feature` (10 files), runner `features/features_test.go` (`TestFeatures`), steps in `features_test.go`, `steps_rules_test.go`, `steps_rules_http_test.go`, `steps_rules_assert_test.go` | 10 feature files, **136 `Scenario`/`Scenario Outline` definitions, 172 executed scenarios** (1490 steps; 2 definitions are `@known-bug` and skipped by default) | nothing | Wires the use cases the REST and consumer surface needs (not only the first five), the in-memory board and idempotency stores and the real chi router with the `Idempotency-Key` middleware and `Readiness` (the same wiring as `cmd/api` `buildHTTPServer`), with an outbox recorder standing in for the relay. Strict mode. |
 | Contract | `internal/adapters/inbound/kafka/producer_contract_test.go`, `dock_contract_test.go`, `contracts/` | 5 | nothing | See below. |
 | Integration | `internal/adapters/outbound/postgres/service_integration_test.go` (`//go:build integration`) | 3 (one is `TestMain`) | Docker | Real Postgres through testcontainers (`internal/testing/pgtest`): `TestExpectPackagePlansExactlyOneLoadUnderConcurrency` (the one-open-load race backstop) and `TestServicePathOverPostgres` (a full path through the real adapters). |
 | Fitness (architecture) | `internal/architecture/` | 13 files, 37 test functions | nothing | See below. |
 | Mutation | `.gremlins.yaml` | n/a | `gremlins` v0.6.0 | See below. |
 
-There are **no handler tests** for the REST adapter (`internal/adapters/inbound/http`) and **none for the MCP adapter** (`internal/adapters/inbound/mcp`); both are covered only indirectly (architecture sensors, the BDD feature through the use cases). The Kafka consumers' decode paths are likewise exercised mostly through the use-case tests and the yard contract test. There is no end-to-end test of the Kafka consumers against a live broker in this repository (`internal/testing/kafkatest` exists as a helper; no test in the tree uses it).
+There are **no handler unit tests** for the REST adapter (`internal/adapters/inbound/http`; only two metrics tests) and **none for the MCP adapter beyond the governance test** (`internal/adapters/inbound/mcp`); the REST routes are covered by the BDD suite, which serves the real chi router with the `Idempotency-Key` middleware, and the MCP tools only indirectly (architecture sensors, the governance test, the `Queries` use case the BDD suite reads through). The Kafka consumers' decode paths are likewise exercised mostly through the use-case tests and the yard contract test. There is no end-to-end test of the Kafka consumers against a live broker in this repository (`internal/testing/kafkatest` exists as a helper; no test in the tree uses it).
 
 ### The BDD scenarios
 
-All six are in `features/ship_confirm_on_departure.feature`: manifest, stage, load, close and depart with one bill of lading; a departure while `LOADING` that never confirms and flags what missed; a departure that arrives before the load closes (handled, never confirmed, and a re-delivery changes nothing); a departure delivered twice confirms once; a diverted package short-ships and the load still closes; the missed-load sweep flags once even when it runs twice.
+All six original scenarios are in `features/ship_confirm_on_departure.feature`: manifest, stage, load, close and depart with one bill of lading; a departure while `LOADING` that never confirms and flags what missed; a departure that arrives before the load closes (handled, never confirmed, and a re-delivery changes nothing); a departure delivered twice confirms once; a diverted package short-ships and the load still closes; the missed-load sweep flags once even when it runs twice.
+
+Nine further `*_rules.feature` files pin the rules the documentation states (use-cases, aggregate canvas, troubleshooting, `apis/openapi.yaml`), one rule per scenario title:
+
+| File | Definitions | Rules |
+|---|---|---|
+| `api_convention_rules.feature` | 15 | `Idempotency-Key` (missing, 1, 128, 129 characters, replay, reuse), malformed bodies, problem shape, query-parameter errors and `limit` bounds, `/readyz`, CloudEvents type, source and key |
+| `bill_of_lading_rules.feature` | 6 | content, void with reason, void twice, `bol-not-found` |
+| `consumer_policy_rules.feature` | 28 | `ExpectPackage` cutoff resolution (days of week, site timezone), schedule and layout replacement, `BookAppointment` (including the appointment-before-load gap as today's behaviour), `DockTrailer`, `DivertPackage` |
+| `load_and_package_rules.feature` | 30 | `StagePackage`, `LoadPackage`, `UnloadPackage`, `CloseLoad` (short-ships, outstanding packages, diverted once) |
+| `load_board_rules.feature` | 9 | the adherence report after each fold, `loads_at_risk` horizon |
+| `load_lifecycle_rules.feature` | 10 | reopen, cancel, confirmed loads, the cutoff key that plans a fresh load |
+| `load_listing_rules.feature` | 6 | list filters, pages and cursor, packages by state |
+| `missed_load_rules.feature` | 14 | `SweepMissedLoads` at the cutoff, once across sweep and departure |
+| `ship_confirm_rules.feature` | 12 | every row of the `OnDeparture` table |
+
+Two scenarios in `load_and_package_rules.feature` are tagged `@known-bug` (a spec says one thing, the code another) and are skipped by default: `BDD_TAGS=@known-bug go test ./features -run TestFeatures` runs only them and both fail. They are: a short-ship entry without a reason (spec 400, code 500 `internal-error`, `ErrShortShipReasonRequired` is not mapped in `problemCatalogue`) and cancelling a ship-confirmed load (spec 409 `load-confirmed`, code 409 `load-has-packages`, because `CancelLoad` looks for packages first).
 
 ### Contract tests: the yard-management and dock-scheduling pins
 
