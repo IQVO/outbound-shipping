@@ -234,6 +234,17 @@ Feature: Package and load rules - what the dock operator and the supervisor may 
     And the response field "short_ships.0.reason" is "DIVERTED"
     And the last "LoadClosed" event has "short_shipped_count" "1"
 
+  Scenario: Naming an already diverted package in the close records it once with the operator's reason
+    Given package "pkg-2077" of order "order-88424" is manifested on the load
+    And package "pkg-1029" of order "order-88421" is manifested on the load
+    And package "pkg-1029" loads through door "D04"
+    And package "pkg-2077" is diverted
+    When the supervisor closes load "load-bdd1" short-shipping package "pkg-2077" because "DAMAGED"
+    Then the response status is 200
+    And the response list "short_ships" has 1 item
+    And the response field "short_ships.0.package_id" is "pkg-2077"
+    And the response field "short_ships.0.reason" is "DAMAGED"
+
   Scenario: Naming an already diverted package in the close does not record it twice
     Given package "pkg-2077" of order "order-88424" is manifested on the load
     And package "pkg-1029" of order "order-88421" is manifested on the load
@@ -244,12 +255,9 @@ Feature: Package and load rules - what the dock operator and the supervisor may 
     And the response list "short_ships" has 1 item
     And the last "LoadClosed" event has "short_shipped_count" "1"
 
-  # Spec: apis/openapi.yaml ShortShip requires a reason (minLength 1) and a
-  # malformed body is 400 bad-request ("a missing/invalid required field");
-  # use-cases.md: "each entry needs both fields". The code lets
-  # ErrShortShipReasonRequired fall through the problem catalogue: 500
-  # internal-error.
-  @known-bug
+  # apis/openapi.yaml ShortShip requires a reason (minLength 1) and a
+  # malformed body is 400 bad-request; use-cases.md: "each entry needs both
+  # fields". The entry is validated before any package is touched.
   Scenario: A short-ship entry without a reason is refused as a bad request
     Given package "pkg-1029" of order "order-88421" is manifested on the load
     And package "pkg-1029" loads through door "D04"
@@ -257,6 +265,8 @@ Feature: Package and load rules - what the dock operator and the supervisor may 
     And package "pkg-2055" stages at "STG-D04-A"
     When the supervisor closes load "load-bdd1" short-shipping package "pkg-2055" because ""
     Then the problem is "bad-request" with status 400
+    And load "load-bdd1" is "LOADING"
+    And exactly 0 "LoadClosed" events were published
 
   Scenario: A load that is already closed refuses a second close
     Given package "pkg-1029" of order "order-88421" is manifested on the load
@@ -307,21 +317,9 @@ Feature: Package and load rules - what the dock operator and the supervisor may 
       | the supervisor reopens load "load-bdd1"  |
       | the supervisor closes load "load-bdd1"   |
 
-  Scenario: Cancelling a ship-confirmed load is refused and changes nothing
-    Given package "pkg-1029" of order "order-88421" is manifested on the load
-    And package "pkg-1029" loads through door "D04"
-    And the load closes with 1 package loaded
-    And trailer "trl-91" departs with seal "SL-4471"
-    When the supervisor cancels load "load-bdd1" because "customer called"
-    Then the response status is 409
-    And load "load-bdd1" is "SHIP_CONFIRMED"
-    And exactly 0 "LoadCancelled" events were published
-
-  # Spec: apis/openapi.yaml cancelLoad ("A SHIP_CONFIRMED load refuses with
-  # 409 load-confirmed") and the aggregate canvas ("refuseIfConfirmed on every
-  # command"). The CancelLoad use case looks for packages first, and a
-  # confirmed load always has some: it answers 409 load-has-packages.
-  @known-bug
+  # apis/openapi.yaml cancelLoad ("A SHIP_CONFIRMED load refuses with 409
+  # load-confirmed") and the aggregate canvas ("refuseIfConfirmed on every
+  # command"): the load's state is named before its packages are looked at.
   Scenario: Cancelling a ship-confirmed load answers load-confirmed
     Given package "pkg-1029" of order "order-88421" is manifested on the load
     And package "pkg-1029" loads through door "D04"
@@ -329,6 +327,8 @@ Feature: Package and load rules - what the dock operator and the supervisor may 
     And trailer "trl-91" departs with seal "SL-4471"
     When the supervisor cancels load "load-bdd1" because "customer called"
     Then the problem is "load-confirmed" with status 409
+    And load "load-bdd1" is "SHIP_CONFIRMED"
+    And exactly 0 "LoadCancelled" events were published
 
   Scenario: A package manifested after its load closed plans a second load for the same cutoff
     Given package "pkg-1029" of order "order-88421" is manifested on the load

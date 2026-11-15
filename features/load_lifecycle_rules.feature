@@ -48,7 +48,7 @@ Feature: Load lifecycle rules - planned, cancelled and closed loads
     And an "OUTBOUND" appointment "appt-2211" for cpt "cpt-1600" at door "D04" carried by "STDOUT" is booked
     And trailer "trl-91" docks at door "D04"
     When the supervisor cancels load "load-bdd1" because "carrier cancelled the pickup"
-    Then the response status is 409
+    Then the problem is "load-state" with status 409
     And load "load-bdd1" is "LOADING"
     And exactly 0 "LoadCancelled" events were published
 

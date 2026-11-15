@@ -187,6 +187,26 @@ func TestCancelLoad(t *testing.T) {
 	wantErr(t, loading.CancelLoad("late", planAt), ErrInvalidTransition)
 }
 
+// CheckCancellable names the refusal by state alone, before any package is
+// read: PLANNED passes, SHIP_CONFIRMED is ErrLoadConfirmed, every other state
+// ErrInvalidTransition. It mutates and raises nothing.
+func TestCheckCancellable(t *testing.T) {
+	planned := plannedLoad(t)
+	planned.PullEvents()
+	mustLoad(t, planned.CheckCancellable())
+	if planned.State() != StatePlanned || planned.Version() != 1 || len(planned.PullEvents()) != 0 {
+		t.Fatalf("CheckCancellable changed the load: %s v%d", planned.State(), planned.Version())
+	}
+	wantErr(t, loadingLoad(t).CheckCancellable(), ErrInvalidTransition)
+	wantErr(t, closedLoad(t).CheckCancellable(), ErrInvalidTransition)
+	confirmed := closedLoad(t)
+	mustLoad(t, confirmed.ConfirmShipment(confirmInput()))
+	wantErr(t, confirmed.CheckCancellable(), ErrLoadConfirmed)
+	cancelled := plannedLoad(t)
+	mustLoad(t, cancelled.CancelLoad("withdrawn", planAt))
+	wantErr(t, cancelled.CheckCancellable(), ErrInvalidTransition)
+}
+
 func TestPullEventsDrains(t *testing.T) {
 	l := plannedLoad(t)
 	l.PullEvents()

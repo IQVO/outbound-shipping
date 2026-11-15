@@ -69,7 +69,7 @@ Its two tools and the load resource are described on [MCP tools](/docs/mcp/tools
 
 ## First calls
 
-The service has no route that creates a package or a load: both appear when upstream Kafka events arrive (a `PackageManifested` plans the load and expects the package, see [Integration](/docs/ecosystem/integration)). The REST surface starts after that. Every POST needs an `Idempotency-Key` header (the spec asks for 16 to 128 characters); a request without one is `400 idempotency-key-required`.
+The service has no route that creates a package or a load: both appear when upstream Kafka events arrive (a `PackageManifested` plans the load and expects the package, see [Integration](/docs/ecosystem/integration)). The REST surface starts after that. Every POST needs an `Idempotency-Key` header (1 to 128 characters); a request without one is `400 idempotency-key-required`.
 
 Read the loads of a site (identifiers below are the ones the BDD feature uses):
 

@@ -23,3 +23,5 @@ immutable; a changed decision gets a new ADR that supersedes the old one. The
 | [0007](/docs/adr/0007-dock-scheduling-contract-pinned) | The dock-scheduling contract is pinned and tested | Accepted (2026-11-10). Completes ADR 0006. |
 | [0008](/docs/adr/0008-adopt-the-fleet-observability-standard) | Adopt the fleet observability standard (OpenTelemetry Tier 1 and one Tier 2 counter) | Accepted (2026-11-13). Applies the fleet's standard metrics convention. |
 | [0009](/docs/adr/0009-pin-the-remaining-event-contracts) | The remaining four event contracts are pinned (E1–E4) | Accepted (2026-11-15). Completes ADR 0006/0007. |
+| [0010](/docs/adr/0010-spec-rulings-from-the-bdd-wave) | Rulings on the spec-versus-code divergences the BDD wave found | Accepted (2026-11-15). Refines ADR 0005 and ADR 0008 (REST errors, load adherence) without changing them. |
+| [0011](/docs/adr/0011-door-for-an-appointment-booked-before-its-load) | A door for an appointment booked before its load exists | Proposed (2026-11-15). Nothing implemented; the gap in troubleshooting.md stands until accepted. |

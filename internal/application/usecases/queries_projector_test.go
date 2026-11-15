@@ -200,14 +200,16 @@ func TestQueriesServeTheLoadReads(t *testing.T) {
 		t.Fatalf("unknown load: %v", err)
 	}
 
-	// Keyset pagination: a full page yields the cursor, the next page is empty.
+	// Keyset pagination: the only load fills a page of 1 and is the last page
+	// (no cursor); the paging with a cursor is in
+	// TestListPackagesEmitsACursorOnlyWhenAnotherPageFollows and TestListLoadsEmitsACursorOnlyWhenAnotherPageFollows.
 	page, next, err := r.queries.ListLoads(ctx, repository.LoadFilter{}, "", 1)
-	if err != nil || len(page) != 1 || next == "" {
+	if err != nil || len(page) != 1 || next != "" {
 		t.Fatalf("list loads page 1: %d %q %v", len(page), next, err)
 	}
-	page2, next2, err := r.queries.ListLoads(ctx, repository.LoadFilter{}, next, 1)
+	page2, next2, err := r.queries.ListLoads(ctx, repository.LoadFilter{}, string(loadID), 1)
 	if err != nil || len(page2) != 0 || next2 != "" {
-		t.Fatalf("list loads page 2: %d %q %v", len(page2), next2, err)
+		t.Fatalf("list loads after the last: %d %q %v", len(page2), next2, err)
 	}
 	// limit < 1 falls back to the default page size.
 	if page, _, err := r.queries.ListLoads(ctx, repository.LoadFilter{}, "", 0); err != nil || len(page) != 1 {
