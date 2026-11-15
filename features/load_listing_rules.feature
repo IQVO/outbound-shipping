@@ -40,12 +40,29 @@ Feature: Load reads - filters, pages and packages of a load
     Then the response list "items" has 3 items
     And the response field "nextCursor" is "null"
 
+  Scenario: A page that is exactly full and has nothing after it carries no cursor
+    When GET "/loads?limit=3" is requested
+    Then the response list "items" has 3 items
+    And the response field "nextCursor" is "null"
+
   Scenario: A page that is full carries a cursor and the next page continues after it
     When GET "/loads?limit=1" is requested
     Then the response list "items" has 1 item
     When the next page of "/loads" is requested with limit 1
     Then the response list "items" has 1 item
     And the page does not repeat the previous page's first item
+
+  Scenario: Following the cursors ends on a last page with no cursor, never on an empty page
+    When GET "/loads?limit=2" is requested
+    Then the response list "items" has 2 items
+    When the next page of "/loads" is requested with limit 2
+    Then the response list "items" has 1 item
+    And the response field "nextCursor" is "null"
+
+  Scenario: A page of packages that is exactly full carries no cursor
+    When GET "/loads/load-bdd1/packages?limit=1" is requested
+    Then the response list "items" has 1 item
+    And the response field "nextCursor" is "null"
 
   Scenario: The packages of a load filter by package state
     Given zone "zone-1" belongs to site "SITE-1"

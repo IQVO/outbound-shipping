@@ -302,21 +302,21 @@ func TestStagePullsTheHeaderSite(t *testing.T) {
 	}
 }
 
-// TestListLoadPackagesPagination pins the default limit and the full-page
-// cursor of the package listing.
+// TestListLoadPackagesPagination pins the default limit and that the last
+// page, exactly full or not, has no cursor (the full two-package paging is in
+// TestListPackagesEmitsACursorOnlyWhenAnotherPageFollows and TestListLoadsEmitsACursorOnlyWhenAnotherPageFollows).
 func TestListLoadPackagesPagination(t *testing.T) {
 	ctx := context.Background()
 	r := newRig(t)
 	loadID := loadedLoad(t, r)
-	// limit 0 falls back to the default; a full page (1 of 1) yields the
-	// cursor, and the page after it is empty.
+	// A page that holds the load's only package is the last page: no cursor.
 	page, next, err := r.queries.ListLoadPackages(ctx, loadID, repository.PackageFilter{}, "", 1)
-	if err != nil || len(page) != 1 || next != "pkg-1029" {
+	if err != nil || len(page) != 1 || next != "" {
 		t.Fatalf("packages page 1: %d %q %v", len(page), next, err)
 	}
-	page2, next2, err := r.queries.ListLoadPackages(ctx, loadID, repository.PackageFilter{}, next, 1)
+	page2, next2, err := r.queries.ListLoadPackages(ctx, loadID, repository.PackageFilter{}, "pkg-1029", 1)
 	if err != nil || len(page2) != 0 || next2 != "" {
-		t.Fatalf("packages page 2: %d %q %v", len(page2), next2, err)
+		t.Fatalf("packages after the last: %d %q %v", len(page2), next2, err)
 	}
 	if page, _, err := r.queries.ListLoadPackages(ctx, loadID, repository.PackageFilter{}, "", 0); err != nil || len(page) != 1 {
 		t.Fatalf("packages default limit: %d %v", len(page), err)

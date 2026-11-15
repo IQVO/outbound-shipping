@@ -28,6 +28,13 @@ type CloseLoad struct {
 
 // Handle closes the load, recording shortShips.
 func (uc *CloseLoad) Handle(ctx context.Context, loadID shared.LoadID, shortShips []shared.ShortShip) (*outboundload.OutboundLoad, error) {
+	// Every entry needs a package and a reason (openapi ShortShip). Refuse a
+	// bad entry before any package is touched, whatever the package's state.
+	for _, s := range shortShips {
+		if err := s.Valid(); err != nil {
+			return nil, err
+		}
+	}
 	var load *outboundload.OutboundLoad
 	err := uc.UoW.Do(ctx, func(ctx context.Context) error {
 		l, err := uc.Loads.Get(ctx, loadID)
@@ -171,9 +178,12 @@ func (uc *ReopenLoad) Handle(ctx context.Context, loadID shared.LoadID) (*outbou
 }
 
 // CancelLoad is the supervisor's cancel (POST /loads/{loadId}/cancellations):
-// PLANNED -> CANCELLED. A load with packages assigned refuses
-// ErrLoadHasPackages: cancelling would strand them on a dead load (the model
-// leaves re-planning unmodelled); short-ship and close instead.
+// PLANNED -> CANCELLED. The aggregate names the state refusals first
+// (ErrLoadConfirmed for a SHIP_CONFIRMED load, ErrInvalidTransition for a
+// LOADING, CLOSED or CANCELLED one: apis/openapi.yaml cancelLoad). Only then,
+// a PLANNED load with packages assigned refuses ErrLoadHasPackages: cancelling
+// would strand them on a dead load (the model leaves re-planning unmodelled);
+// short-ship and close instead.
 type CancelLoad struct {
 	UoW   ports.UnitOfWork
 	Loads ports.LoadRepo
@@ -188,6 +198,9 @@ func (uc *CancelLoad) Handle(ctx context.Context, loadID shared.LoadID, reason s
 	err := uc.UoW.Do(ctx, func(ctx context.Context) error {
 		l, err := uc.Loads.Get(ctx, loadID)
 		if err != nil {
+			return err
+		}
+		if err := l.CheckCancellable(); err != nil {
 			return err
 		}
 		pkgs, err := uc.Pkgs.ListByLoad(ctx, loadID, repository.PackageFilter{}, "", 1)

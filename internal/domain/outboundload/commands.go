@@ -278,15 +278,26 @@ func distinctSorted(in []string) []string {
 	return slices.Compact(out)
 }
 
-// CancelLoad moves PLANNED -> CANCELLED and raises LoadCancelled. Only a
-// PLANNED load can be cancelled: a LOADING load must be resolved (short-ship
-// and close) instead.
-func (l *OutboundLoad) CancelLoad(reason string, at time.Time) error {
+// CheckCancellable reports why the load cannot be cancelled by state alone:
+// ErrLoadConfirmed for a SHIP_CONFIRMED load, ErrInvalidTransition for any
+// other state but PLANNED. It reads no packages and mutates nothing, so a use
+// case can ask it before it looks at the load's packages.
+func (l *OutboundLoad) CheckCancellable() error {
 	if err := l.refuseIfConfirmed(); err != nil {
 		return err
 	}
 	if l.state != StatePlanned {
 		return ErrInvalidTransition
+	}
+	return nil
+}
+
+// CancelLoad moves PLANNED -> CANCELLED and raises LoadCancelled. Only a
+// PLANNED load can be cancelled: a LOADING load must be resolved (short-ship
+// and close) instead.
+func (l *OutboundLoad) CancelLoad(reason string, at time.Time) error {
+	if err := l.CheckCancellable(); err != nil {
+		return err
 	}
 	if reason == "" {
 		return ErrCancelReasonRequired

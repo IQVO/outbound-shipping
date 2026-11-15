@@ -48,18 +48,22 @@ func (uc *Queries) GetLoad(ctx context.Context, id shared.LoadID) (*outboundload
 	return uc.Loads.Get(ctx, id)
 }
 
-// ListLoads returns one page of loads after cursor ("" = first page).
+// ListLoads returns one page of loads after cursor ("" = first page). The
+// next cursor is empty on the last page, including a page that is exactly
+// full when nothing follows it (openapi LoadPage: "null after the last").
 func (uc *Queries) ListLoads(ctx context.Context, filter repository.LoadFilter, cursor string, limit int) ([]*outboundload.OutboundLoad, string, error) {
 	if limit < 1 {
 		limit = DefaultPageLimit
 	}
-	page, err := uc.Loads.List(ctx, filter, shared.LoadID(cursor), limit)
+	// One row past the page tells whether a next page exists.
+	page, err := uc.Loads.List(ctx, filter, shared.LoadID(cursor), limit+1)
 	if err != nil {
 		return nil, "", err
 	}
 	next := ""
-	if len(page) == limit {
-		next = string(page[len(page)-1].ID())
+	if len(page) > limit {
+		page = page[:limit]
+		next = string(page[limit-1].ID())
 	}
 	return page, next, nil
 }
@@ -69,7 +73,8 @@ func (uc *Queries) GetPackage(ctx context.Context, id shared.PackageID) (*shippi
 	return uc.Pkgs.Get(ctx, id)
 }
 
-// ListLoadPackages returns one page of the load's packages after cursor.
+// ListLoadPackages returns one page of the load's packages after cursor. Like
+// ListLoads, the next cursor is empty when no package follows the page.
 func (uc *Queries) ListLoadPackages(ctx context.Context, load shared.LoadID, filter repository.PackageFilter, cursor string, limit int) ([]*shippingpackage.ShippingPackage, string, error) {
 	if _, err := uc.Loads.Get(ctx, load); err != nil {
 		return nil, "", err
@@ -77,13 +82,14 @@ func (uc *Queries) ListLoadPackages(ctx context.Context, load shared.LoadID, fil
 	if limit < 1 {
 		limit = DefaultPageLimit
 	}
-	page, err := uc.Pkgs.ListByLoad(ctx, load, filter, shared.PackageID(cursor), limit)
+	page, err := uc.Pkgs.ListByLoad(ctx, load, filter, shared.PackageID(cursor), limit+1)
 	if err != nil {
 		return nil, "", err
 	}
 	next := ""
-	if len(page) == limit {
-		next = string(page[len(page)-1].ID())
+	if len(page) > limit {
+		page = page[:limit]
+		next = string(page[limit-1].ID())
 	}
 	return page, next, nil
 }

@@ -8,6 +8,7 @@ import (
 	"github.com/claudioed/outbound-shipping/internal/application/usecases"
 	"github.com/claudioed/outbound-shipping/internal/domain/billoflading"
 	"github.com/claudioed/outbound-shipping/internal/domain/outboundload"
+	"github.com/claudioed/outbound-shipping/internal/domain/shared"
 	"github.com/claudioed/outbound-shipping/internal/domain/shippingpackage"
 )
 
@@ -71,6 +72,12 @@ var problemCatalogue = []struct {
 	{outboundload.ErrInvalidTransition, problem{status: http.StatusConflict, slug: "load-state", title: "The command is not allowed from the load's current state"}},
 	{outboundload.ErrCancelReasonRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "a cancellation needs a reason"}},
 	{outboundload.ErrWrongDoor, problem{status: http.StatusConflict, slug: "trailer-not-docked", title: "The trailer must dock at the load's assigned door"}},
+	// A short-ship entry without a package or a reason is a bad body, not a
+	// server fault (openapi ShortShip: package_id and reason, minLength 1).
+	{shared.ErrShortShipReasonRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
+	{shared.ErrShortShipPackageRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
+	{shippingpackage.ErrShortShipReasonRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
+	{outboundload.ErrInvalidShortShip, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
 	{outboundload.ErrRequiredField, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request"}},
 	{outboundload.ErrNoTimestamp, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request"}},
 	{usecases.ErrLoadHasPackages, problem{status: http.StatusConflict, slug: "load-has-packages", title: "The load already has packages assigned", detail: "short-ship them and close instead of cancelling"}},
