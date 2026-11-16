@@ -27,5 +27,12 @@ unleash:
     # differs. See HARNESS.md's mutation-testing section for the
     # tagless-switch-under-reports pitfall before assuming a low number
     # means missing tests.
-    efficacy: "90"
-    mutant-coverage: "90"
+    # Measured 2026-11-15, gremlins v0.6.0, per package (`make mutation`, the
+    # CI loop) and on ./internal/domain (`make mutation-full`): 0 lived, 0 not
+    # covered, efficacy 100% and mutator coverage 100% in each:
+    #   shared 2 killed, outboundload 52, shippingpackage 40, billoflading 27
+    #   (aggregate 121 killed).
+    # Plain numbers on purpose: a quoted value is read by gremlins v0.6.0 as 0
+    # and the gate would never fail.
+    efficacy: 99
+    mutant-coverage: 99
