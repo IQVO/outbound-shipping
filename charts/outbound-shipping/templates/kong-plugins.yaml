@@ -51,6 +51,18 @@ config:
     # API takes an Idempotency-Key and the preflight must allow it or the
     # browser blocks the call before it reaches Kong.
     - Idempotency-Key
+    - If-Match
+  exposed_headers:
+    - Content-Length
+    # The client reads the ETag for If-Match and the replay marker of a
+    # repeated Idempotency-Key.
+    - ETag
+    - Idempotency-Replayed
+    # MCP Streamable HTTP clients need the session id from the response.
+    - Mcp-Session-Id
+  credentials: false
+  max_age: 3600
+  preflight_continue: false
 {{- else if eq $name "prometheus" }}
 plugin: prometheus
 config:
