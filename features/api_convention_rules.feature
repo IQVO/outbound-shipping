@@ -61,16 +61,24 @@ Feature: API conventions - idempotent POSTs, problem documents, probes and event
     When a POST is sent to "/packages/pkg-2055/stagings" with the body {"staging_location":"STG-D04-A"} and the Idempotency-Key "stage-pkg-1029-20261106-req-03"
     Then the problem is "idempotency-key-reused" with status 409
 
-  Scenario: A rejected request replays its rejection under the same key, a new key runs again
+  Scenario: A refusal that a retry could pass is not stored, so the same key runs again (ADR 0012)
     When a POST is sent to "/packages/pkg-3001/stagings" with the body {"staging_location":"STG-D04-A"} and the Idempotency-Key "stage-pkg-3001-20261106-req-01"
     Then the problem is "package-not-found" with status 404
     Given package "pkg-3001" of order "order-88425" is manifested on the load
     When a POST is sent to "/packages/pkg-3001/stagings" with the body {"staging_location":"STG-D04-A"} and the Idempotency-Key "stage-pkg-3001-20261106-req-01"
-    Then the problem is "package-not-found" with status 404
-    And the response was replayed from the stored answer
-    When a POST is sent to "/packages/pkg-3001/stagings" with the body {"staging_location":"STG-D04-A"} and the Idempotency-Key "stage-pkg-3001-20261106-req-02"
     Then the response status is 200
+    And the response was not replayed from the stored answer
     And package "pkg-3001" is "STAGED"
+    When a POST is sent to "/packages/pkg-3001/stagings" with the body {"staging_location":"STG-D04-A"} and the Idempotency-Key "stage-pkg-3001-20261106-req-01"
+    Then the response status is 200
+    And the response was replayed from the stored answer
+
+  Scenario: A refusal that is a function of the request alone is stored and replayed (ADR 0012)
+    When a POST is sent to "/missed-load-sweeps" with the body {} and the Idempotency-Key "sweep-bad-request-0002"
+    Then the problem is "bad-request" with status 400
+    When a POST is sent to "/missed-load-sweeps" with the body {} and the Idempotency-Key "sweep-bad-request-0002"
+    Then the problem is "bad-request" with status 400
+    And the response was replayed from the stored answer
 
   # --- bodies and problems ----------------------------------------------
 

@@ -65,8 +65,18 @@ func writeError(w http.ResponseWriter, r *http.Request, err error) {
 	writeProblem(w, r, p, detail)
 }
 
-// writeProblem writes p with an explicit detail.
+// replayMarker is implemented by the Idempotency-Key middleware's capturing
+// writer: the error writer tells it the replay class of the problem it is about
+// to answer, so the middleware reads the class and keeps no list of slugs.
+type replayMarker interface{ MarkReplay(class replayClass) }
+
+// writeProblem writes p with an explicit detail and marks the capturing writer
+// (if w is one) with p's replay class: every problem on every route, writeError
+// included, goes through here.
 func writeProblem(w http.ResponseWriter, r *http.Request, p problem, detail string) {
+	if m, ok := w.(replayMarker); ok {
+		m.MarkReplay(p.class)
+	}
 	w.Header().Set("Content-Type", "application/problem+json")
 	w.WriteHeader(p.status)
 	_ = json.NewEncoder(w).Encode(problemDetail{

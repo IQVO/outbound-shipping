@@ -106,7 +106,8 @@ func handleHealthz(w http.ResponseWriter, _ *http.Request) {
 }
 
 // dependencyUnavailable is the 503 problem of a failed dependency check.
-var dependencyUnavailable = problem{status: http.StatusServiceUnavailable, slug: "dependency-unavailable", title: "A runtime dependency is unavailable"}
+// A 5xx is never stored, so its class is RETRYABLE; /readyz is not a keyed route.
+var dependencyUnavailable = newProblem(http.StatusServiceUnavailable, "dependency-unavailable", "A runtime dependency is unavailable", replayRetryable)
 
 // handleReadyz: 200 {"status":"ready"} while ready; 503 {"status":"not_ready"}
 // once SetNotReady was called (draining); 503 problem+json

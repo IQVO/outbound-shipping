@@ -34,3 +34,10 @@ where the code is deliberate (an ADR says so, tests pin it, the fleet relies on 
 - The openapi changes are text and one bound (`Idempotency-Key` `minLength` 16 to 1); the REST reference is
   regenerated from it. No Kafka contract, envelope or outbox rule changes.
 - Not decided here: the appointment-before-load gap (ADR 0011, Proposed).
+
+## Update 2026-11-20
+
+[ADR 0012](/docs/adr/0012-every-problem-type-has-a-replay-class) supersedes the middleware behaviour
+this ADR's context relied on (a 4xx answer stored and replayed unconditionally): a refusal is now
+stored only when its problem type is FINAL. Item 6's own ruling — the key bound of 1 to 128
+characters — stands unchanged.

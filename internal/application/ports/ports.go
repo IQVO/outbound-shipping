@@ -172,7 +172,8 @@ type ProcessedEvents interface {
 }
 
 // IdempotencyStore keeps the answers of POSTs made with an Idempotency-Key.
-// The HTTP adapter stores 2xx and 4xx answers only, never 5xx.
+// The HTTP adapter stores a 2xx answer and a 4xx answer whose problem type is
+// FINAL (ADR 0012); a RETRYABLE refusal and a 5xx are never stored.
 type IdempotencyStore interface {
 	// Lookup returns the stored answer for the key.
 	Lookup(ctx context.Context, key string) (repository.IdempotencyRecord, bool, error)

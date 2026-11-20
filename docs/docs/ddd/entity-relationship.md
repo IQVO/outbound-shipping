@@ -151,7 +151,7 @@ Some columns are omitted for readability (`created_at`/`updated_at`, `dataschema
 | `load_board` | LoadBoardView projection | PK `load_id`; index `(site_id, operating_date, cpt_id)` for the report | analytics consumer |
 | `outbox_events` | transactional outbox | PK `id`; `UNIQUE (event_id, topic)`; partial index of unpublished rows | use cases (insert), relay (drain) |
 | `processed_events` | inbox | PK `(consumer, event_id)` | every consumer |
-| `idempotency_keys` | stored answers of REST POSTs | PK `key`; `status` between 200 and 499; index on `created_at` | the Idempotency-Key middleware |
+| `idempotency_keys` | stored answers of REST POSTs: 2xx and FINAL refusals ([ADR 0012](/docs/adr/0012-every-problem-type-has-a-replay-class)); the CHECK still admits any 4xx | PK `key`; `status` between 200 and 499; index on `created_at` | the Idempotency-Key middleware |
 
 Text keys that are compared or ordered in Go use the `"C"` collation so ordering and keyset comparisons follow byte order. The migration has a `.down.sql`; there is no other migration.
 

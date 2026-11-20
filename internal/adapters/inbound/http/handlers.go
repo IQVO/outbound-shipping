@@ -16,7 +16,7 @@ import (
 func (s *Server) handleStagePackage(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "packageId")
 	if id == "" {
-		writeProblem(w, r, problem{http.StatusBadRequest, "invalid-parameter", "Parameter is invalid", "packageId is required"}, "")
+		writeProblem(w, r, invalidParameter, "")
 		return
 	}
 	var req stagePackageRequest
@@ -134,14 +134,14 @@ func (s *Server) handleMissedLoadSweep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.SiteID == "" {
-		writeProblem(w, r, problem{http.StatusBadRequest, "bad-request", "Malformed request", "site_id is required"}, "")
+		writeProblem(w, r, badRequest, "")
 		return
 	}
 	var cutoff time.Time
 	if req.Cutoff != "" {
 		t, err := time.Parse(time.RFC3339, req.Cutoff)
 		if err != nil {
-			writeProblem(w, r, problem{http.StatusBadRequest, "bad-request", "Malformed request", "cutoff must be RFC 3339"}, "")
+			writeProblem(w, r, badRequest, "")
 			return
 		}
 		cutoff = t
@@ -177,12 +177,12 @@ func (s *Server) handleListLoads(w http.ResponseWriter, r *http.Request) {
 	}
 	state := q.Get("state")
 	if state != "" && !validLoadState(state) {
-		writeProblem(w, r, problem{http.StatusBadRequest, "invalid-parameter", "Parameter is invalid", "state must be a load state"}, "")
+		writeProblem(w, r, invalidParameter, "")
 		return
 	}
 	date := outboundload.OperatingDate(q.Get("operating_date"))
 	if date != "" && !date.Valid() {
-		writeProblem(w, r, problem{http.StatusBadRequest, "invalid-parameter", "Parameter is invalid", "operating_date must be YYYY-MM-DD"}, "")
+		writeProblem(w, r, invalidParameter, "")
 		return
 	}
 	limit, err := usecases.ParseLimit(q.Get("limit"))
@@ -219,7 +219,7 @@ func (s *Server) handleListLoadPackages(w http.ResponseWriter, r *http.Request) 
 	}
 	state := q.Get("state")
 	if state != "" && !validPackageState(state) {
-		writeProblem(w, r, problem{http.StatusBadRequest, "invalid-parameter", "Parameter is invalid", "state must be a package state"}, "")
+		writeProblem(w, r, invalidParameter, "")
 		return
 	}
 	limit, err := usecases.ParseLimit(q.Get("limit"))
@@ -264,7 +264,7 @@ func (s *Server) handleLoadAdherence(w http.ResponseWriter, r *http.Request) {
 	}
 	date := outboundload.OperatingDate(q.Get("operating_date"))
 	if date != "" && !date.Valid() {
-		writeProblem(w, r, problem{http.StatusBadRequest, "invalid-parameter", "Parameter is invalid", "operating_date must be YYYY-MM-DD"}, "")
+		writeProblem(w, r, invalidParameter, "")
 		return
 	}
 	rows, generatedAt, err := s.Queries.AdherenceReport(r.Context(), shared.SiteID(q.Get("site_id")), date)

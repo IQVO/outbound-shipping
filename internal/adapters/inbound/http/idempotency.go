@@ -48,9 +48,11 @@ var (
 //     stored answer commit or roll back together.
 //   - A 4xx answer rolls the unit of work back (a rejected request leaves no
 //     effect, and a Postgres transaction that hit a constraint is aborted
-//     anyway) and is then stored on its own, so the same key and body replay
-//     the same rejection. A 5xx answer is rolled back and NEVER stored, so
-//     the same key can retry the real work.
+//     anyway). Whether it is then stored on its own depends on the replay class
+//     its problem type declares (errors.go, ADR 0012): FINAL is stored, so the
+//     same key and body replay the same rejection; RETRYABLE, or no class, is
+//     not stored, so the same key executes again. A 5xx answer is rolled back
+//     and NEVER stored, so the same key can retry the real work.
 //   - Two concurrent requests with one new key both run, but the store keeps
 //     the first writer's answer (ports.IdempotencyStore.Save): after saving, a
 //     request re-reads the key in its own transaction, and the one that finds
@@ -139,29 +141,6 @@ type storedAnswer struct {
 	Body   []byte      `json:"body"`
 }
 
-// capture records the handler's response so it can be stored (and committed)
-// BEFORE anything reaches the client.
-type capture struct {
-	header http.Header
-	code   int
-	body   bytes.Buffer
-}
-
-func (c *capture) Header() http.Header { return c.header }
-
-func (c *capture) WriteHeader(code int) {
-	if c.code == 0 {
-		c.code = code
-	}
-}
-
-func (c *capture) Write(b []byte) (int, error) {
-	if c.code == 0 {
-		c.code = http.StatusOK
-	}
-	return c.body.Write(b)
-}
-
 // serveFresh needs no SAVEPOINT (unlike the join-the-transaction shape of the
 // sibling contexts): a 4xx rolls the WHOLE unit of work back (errRollback) and is
 // stored on its own afterwards, so a handler that mapped a failed statement
@@ -176,7 +155,7 @@ func (m *Idempotency) serveFresh(w http.ResponseWriter, r *http.Request, next ht
 	)
 	err := m.UoW.Do(r.Context(), func(ctx context.Context) error {
 		out = serveCaptured(next, r.WithContext(ctx))
-		if out.code >= http.StatusBadRequest {
+		if !out.succeeded() {
 			return errRollback
 		}
 		rec, err := m.record(key, fp, out)
@@ -206,17 +185,6 @@ func (m *Idempotency) serveFresh(w http.ResponseWriter, r *http.Request, next ht
 		return
 	}
 	writeError(w, r, err)
-}
-
-// serveCaptured runs next and returns what it answered (200 when it wrote
-// nothing).
-func serveCaptured(next http.Handler, r *http.Request) *capture {
-	out := &capture{header: http.Header{}}
-	next.ServeHTTP(out, r)
-	if out.code == 0 {
-		out.code = http.StatusOK
-	}
-	return out
 }
 
 func (m *Idempotency) record(key, fp string, out *capture) (repository.IdempotencyRecord, error) {
@@ -252,24 +220,35 @@ func sameAnswer(a, b repository.IdempotencyRecord) bool {
 		bytes.Equal(a.Body, b.Body) && a.CreatedAt.Equal(b.CreatedAt)
 }
 
-// finishRejected answers a request whose unit of work was rolled back: a 5xx
-// goes out as it is and is never stored; a 4xx is stored on its own first so a
-// retry with the same key and body replays it. If another request stored an
-// answer for the key first (it won a race this one lost with a 4xx, such as
-// replenishment-already-open), that answer is replayed instead.
+// finishRejected answers a request whose unit of work was rolled back (a 4xx or
+// a 5xx; ADR 0012):
+//
+//   - a 5xx goes out as it is and is never stored;
+//   - a 4xx marked FINAL (or OUTCOME) is stored on its own first, so a retry with
+//     the same key and body replays it;
+//   - a 4xx marked RETRYABLE, or with no class, is NOT stored: no key row exists
+//     (the store is a separate write, so releasing is skipping it) and a retry
+//     under the same key executes again.
+//
+// Afterwards the store is read once: if another request stored an answer for the
+// key meanwhile (a concurrent duplicate that won), that answer is replayed
+// instead, and with another fingerprint it is the key-reuse conflict.
 func (m *Idempotency) finishRejected(w http.ResponseWriter, r *http.Request, key, fp string, out *capture) {
 	if out.code >= http.StatusInternalServerError {
 		flush(w, out)
 		return
 	}
-	rec, err := m.record(key, fp, out)
-	if err == nil {
-		err = m.Store.Save(r.Context(), rec)
-	}
-	if err != nil {
-		m.Logger.WarnContext(r.Context(), "idempotency: answer not stored", "error", err)
-		flush(w, out)
-		return
+	var rec repository.IdempotencyRecord // zero when this answer is not stored
+	if out.remembersRefusal() {
+		var err error
+		if rec, err = m.record(key, fp, out); err == nil {
+			err = m.Store.Save(r.Context(), rec)
+		}
+		if err != nil {
+			m.Logger.WarnContext(r.Context(), "idempotency: answer not stored", "error", err)
+			flush(w, out)
+			return
+		}
 	}
 	stored, found, err := m.Store.Lookup(r.Context(), key)
 	if err == nil && found && !sameAnswer(stored, rec) {
@@ -300,15 +279,4 @@ func replay(w http.ResponseWriter, r *http.Request, rec repository.IdempotencyRe
 	w.Header().Set(IdempotencyReplayedHeader, "true")
 	w.WriteHeader(rec.Status)
 	_, _ = w.Write(answer.Body)
-}
-
-// flush copies the captured response onto the real client connection.
-func flush(w http.ResponseWriter, out *capture) {
-	for k, vs := range out.header {
-		for _, v := range vs {
-			w.Header().Add(k, v)
-		}
-	}
-	w.WriteHeader(out.code)
-	_, _ = w.Write(out.body.Bytes())
 }
