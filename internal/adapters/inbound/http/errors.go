@@ -15,17 +15,64 @@ import (
 // problemBaseURI is the namespace of this service's RFC 7807 `type` URIs.
 const problemBaseURI = "https://errors.outbound-shipping.warehouse-systems.dev/"
 
-// problem is the fixed (status, slug, title) of one error category. detail,
-// when set, replaces the error's own message (used for domain errors, whose
-// text carries a package prefix and is never sent to a client as is).
+// replayClass is what the Idempotency-Key middleware does with the answer of a
+// retried request (ADR 0012; fleet rule .claude/rules/fleet/idempotency-and-outbox.md).
+// Every problem type declares exactly one; the middleware reads it and keeps no
+// list of slugs.
+//
+//   - replayFinal: the answer is a function of the request alone (or of a state
+//     that only moves one way for it). Stored under the key and replayed.
+//   - replayOutcome: the command COMMITTED state and then answered an error that
+//     must be remembered. Stored and replayed. No problem type of this service is
+//     one: a 4xx rolls the whole unit of work back (ADR 0012), so there is no
+//     committed state to remember, and a test pins that none is declared.
+//   - replayRetryable: nothing committed and the answer depends on state that can
+//     change (a lost optimistic lock, a fact an event has not delivered yet, a
+//     state the aggregate has not reached, a dependency that is not ready). NOT
+//     stored: the key is released and a retry executes again.
+//
+// When unsure between FINAL and RETRYABLE the class is RETRYABLE. A 5xx is never
+// stored whatever its class says, and a refusal that reaches the middleware with
+// no class is released like RETRYABLE.
+type replayClass string
+
+const (
+	replayFinal     replayClass = "FINAL"
+	replayOutcome   replayClass = "OUTCOME"
+	replayRetryable replayClass = "RETRYABLE"
+)
+
+// problem is the fixed (status, slug, title, replay class) of one error
+// category. detail, when set, replaces the error's own message (used for domain
+// errors, whose text carries a package prefix and is never sent to a client as
+// is). Build one with newProblem only (TestProblemsAreBuiltByTheConstructorOnly):
+// a problem cannot exist without a class, and every problem is in the registry
+// the tests read.
 type problem struct {
 	status int
 	slug   string
 	title  string
 	detail string
+	class  replayClass
 }
 
-var internalProblem = problem{status: http.StatusInternalServerError, slug: "internal-error", title: "Internal server error"}
+// registry holds every problem built by newProblem, in declaration order.
+var registry []problem
+
+func newProblem(status int, slug, title string, class replayClass) problem {
+	p := problem{status: status, slug: slug, title: title, class: class}
+	registry = append(registry, p)
+	return p
+}
+
+// withDetail is p with a fixed detail; it is the same problem type (same slug,
+// status and class), so it is not registered again.
+func (p problem) withDetail(detail string) problem {
+	p.detail = detail
+	return p
+}
+
+var internalProblem = newProblem(http.StatusInternalServerError, "internal-error", "Internal server error", replayRetryable)
 
 // Errors the adapter itself raises, before or besides the use cases.
 var (
@@ -40,61 +87,77 @@ var (
 )
 
 // Problems the idempotency middleware writes itself, before any use case runs.
+// It answers them without touching its store, so nothing is ever stored for
+// them; FINAL records that each is a function of the request (and of the stored
+// fingerprint) alone.
 var (
-	idempotencyKeyRequired = problem{status: http.StatusBadRequest, slug: "idempotency-key-required", title: "Idempotency-Key header is required"}
-	idempotencyKeyReused   = problem{status: http.StatusConflict, slug: "idempotency-key-reused", title: "Idempotency-Key was already used with a different request"}
+	idempotencyKeyRequired = newProblem(http.StatusBadRequest, "idempotency-key-required", "Idempotency-Key header is required", replayFinal)
+	idempotencyKeyReused   = newProblem(http.StatusConflict, "idempotency-key-reused", "Idempotency-Key was already used with a different request", replayFinal)
+)
+
+// The problems the handlers write directly (a path or body they cannot read);
+// each is one problem type whatever the detail. Both are a function of the
+// request alone: FINAL.
+var (
+	badRequest        = newProblem(http.StatusBadRequest, "bad-request", "Malformed request", replayFinal)
+	invalidParameter  = newProblem(http.StatusBadRequest, "invalid-parameter", "Parameter is invalid", replayFinal)
+	unknownQueryParam = newProblem(http.StatusBadRequest, "unknown-query-parameter", "Unknown query parameter", replayFinal)
 )
 
 // problemCatalogue maps every typed error to its problem, in match order.
 // Slugs are the catalogue of apis/openapi.yaml (and .claude/rules/rest-api.md).
+// The replay class of each is declared on its problem, with the reason in ADR
+// 0012 (a test holds the ADR table equal to this catalogue). Entries that share a
+// slug share one class.
 var problemCatalogue = []struct {
 	err error
 	p   problem
 }{
-	{errMalformedRequest, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request"}},
-	{errInvalidParameter, problem{status: http.StatusBadRequest, slug: "invalid-parameter", title: "Parameter is invalid"}},
-	{errUnknownQueryParameter, problem{status: http.StatusBadRequest, slug: "unknown-query-parameter", title: "Unknown query parameter"}},
-	{usecases.ErrInvalidListQuery, problem{status: http.StatusBadRequest, slug: "invalid-parameter", title: "Parameter is invalid"}},
+	{errMalformedRequest, badRequest},
+	{errInvalidParameter, invalidParameter},
+	{errUnknownQueryParameter, unknownQueryParam},
+	{usecases.ErrInvalidListQuery, invalidParameter},
 
 	// Package refusals.
-	{shippingpackage.ErrNotStagingLocation, problem{status: http.StatusUnprocessableEntity, slug: "not-staging-location", title: "The location is not a Staging location of the package's site"}},
-	{shippingpackage.ErrWrongLoad, problem{status: http.StatusConflict, slug: "wrong-load", title: "The package loads only onto its own load, through that load's door"}},
-	{shippingpackage.ErrPackageOnAnotherLoad, problem{status: http.StatusConflict, slug: "package-on-another-load", title: "The package belongs to one load at a time"}},
-	{shippingpackage.ErrAlreadyShipped, problem{status: http.StatusConflict, slug: "already-shipped", title: "The package has shipped; the truck has left"}},
-	{shippingpackage.ErrInvalidTransition, problem{status: http.StatusConflict, slug: "package-state", title: "The command is not allowed from the package's current state"}},
+	{shippingpackage.ErrNotStagingLocation, newProblem(http.StatusUnprocessableEntity, "not-staging-location", "The location is not a Staging location of the package's site", replayRetryable)},
+	{shippingpackage.ErrWrongLoad, newProblem(http.StatusConflict, "wrong-load", "The package loads only onto its own load, through that load's door", replayRetryable)},
+	{shippingpackage.ErrPackageOnAnotherLoad, newProblem(http.StatusConflict, "package-on-another-load", "The package belongs to one load at a time", replayRetryable)},
+	{shippingpackage.ErrAlreadyShipped, newProblem(http.StatusConflict, "already-shipped", "The package has shipped; the truck has left", replayFinal)},
+	{shippingpackage.ErrInvalidTransition, newProblem(http.StatusConflict, "package-state", "The command is not allowed from the package's current state", replayRetryable)},
 
 	// Load refusals.
-	{outboundload.ErrPackagesOutstanding, problem{status: http.StatusConflict, slug: "packages-outstanding", title: "A load closes only when every package is loaded or short-shipped with a reason"}},
-	{outboundload.ErrTrailerNotDocked, problem{status: http.StatusConflict, slug: "trailer-not-docked", title: "Loading starts only when the load has a door and a docked trailer"}},
-	{outboundload.ErrLoadNotClosed, problem{status: http.StatusConflict, slug: "load-not-closed", title: "Ship-confirm needs a CLOSED load"}},
-	{outboundload.ErrLoadConfirmed, problem{status: http.StatusConflict, slug: "load-confirmed", title: "A SHIP_CONFIRMED load never changes"}},
-	{outboundload.ErrDuplicateOpenLoad, problem{status: http.StatusConflict, slug: "duplicate-open-load", title: "An open load already exists for this site, cpt, operating date and ship method"}},
-	{outboundload.ErrInvalidTransition, problem{status: http.StatusConflict, slug: "load-state", title: "The command is not allowed from the load's current state"}},
-	{outboundload.ErrCancelReasonRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "a cancellation needs a reason"}},
-	{outboundload.ErrWrongDoor, problem{status: http.StatusConflict, slug: "trailer-not-docked", title: "The trailer must dock at the load's assigned door"}},
+	{outboundload.ErrPackagesOutstanding, newProblem(http.StatusConflict, "packages-outstanding", "A load closes only when every package is loaded or short-shipped with a reason", replayRetryable)},
+	{outboundload.ErrTrailerNotDocked, newProblem(http.StatusConflict, "trailer-not-docked", "Loading starts only when the load has a door and a docked trailer", replayRetryable)},
+	{outboundload.ErrLoadNotClosed, newProblem(http.StatusConflict, "load-not-closed", "Ship-confirm needs a CLOSED load", replayRetryable)},
+	{outboundload.ErrLoadConfirmed, newProblem(http.StatusConflict, "load-confirmed", "A SHIP_CONFIRMED load never changes", replayFinal)},
+	{outboundload.ErrDuplicateOpenLoad, newProblem(http.StatusConflict, "duplicate-open-load", "An open load already exists for this site, cpt, operating date and ship method", replayRetryable)},
+	{outboundload.ErrInvalidTransition, newProblem(http.StatusConflict, "load-state", "The command is not allowed from the load's current state", replayRetryable)},
+	{outboundload.ErrCancelReasonRequired, badRequest.withDetail("a cancellation needs a reason")},
+	{outboundload.ErrWrongDoor, newProblem(http.StatusConflict, "trailer-not-docked", "The trailer must dock at the load's assigned door", replayRetryable)},
 	// A short-ship entry without a package or a reason is a bad body, not a
 	// server fault (openapi ShortShip: package_id and reason, minLength 1).
-	{shared.ErrShortShipReasonRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
-	{shared.ErrShortShipPackageRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
-	{shippingpackage.ErrShortShipReasonRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
-	{outboundload.ErrInvalidShortShip, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request", detail: "every short-ship entry needs a package_id and a reason"}},
-	{outboundload.ErrRequiredField, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request"}},
-	{outboundload.ErrNoTimestamp, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request"}},
-	{usecases.ErrLoadHasPackages, problem{status: http.StatusConflict, slug: "load-has-packages", title: "The load already has packages assigned", detail: "short-ship them and close instead of cancelling"}},
+	{shared.ErrShortShipReasonRequired, badRequest.withDetail("every short-ship entry needs a package_id and a reason")},
+	{shared.ErrShortShipPackageRequired, badRequest.withDetail("every short-ship entry needs a package_id and a reason")},
+	{shippingpackage.ErrShortShipReasonRequired, badRequest.withDetail("every short-ship entry needs a package_id and a reason")},
+	{outboundload.ErrInvalidShortShip, badRequest.withDetail("every short-ship entry needs a package_id and a reason")},
+	{outboundload.ErrRequiredField, badRequest},
+	{outboundload.ErrNoTimestamp, badRequest},
+	{usecases.ErrLoadHasPackages, newProblem(http.StatusConflict, "load-has-packages", "The load already has packages assigned", replayRetryable).withDetail("short-ship them and close instead of cancelling")},
 
 	// Bill of lading refusals.
-	{billoflading.ErrBolAlreadyIssued, problem{status: http.StatusConflict, slug: "bol-already-issued", title: "A bill of lading exists for this load already"}},
-	{billoflading.ErrBolAlreadyVoided, problem{status: http.StatusConflict, slug: "bol-already-voided", title: "The bill of lading is voided already"}},
-	{billoflading.ErrSealMissing, problem{status: http.StatusConflict, slug: "seal-missing", title: "The bill of lading is issued only with the seal yard-management recorded"}},
-	{billoflading.ErrVoidReasonRequired, problem{status: http.StatusBadRequest, slug: "bad-request", title: "Malformed request"}},
+	{billoflading.ErrBolAlreadyIssued, newProblem(http.StatusConflict, "bol-already-issued", "A bill of lading exists for this load already", replayRetryable)},
+	{billoflading.ErrBolAlreadyVoided, newProblem(http.StatusConflict, "bol-already-voided", "The bill of lading is voided already", replayFinal)},
+	{billoflading.ErrSealMissing, newProblem(http.StatusConflict, "seal-missing", "The bill of lading is issued only with the seal yard-management recorded", replayRetryable)},
+	{billoflading.ErrVoidReasonRequired, badRequest},
 
-	// Not-found errors.
-	{repository.ErrLoadNotFound, problem{status: http.StatusNotFound, slug: "load-not-found", title: "Outbound load not found"}},
-	{repository.ErrPackageNotFound, problem{status: http.StatusNotFound, slug: "package-not-found", title: "Shipping package not found"}},
-	{repository.ErrBolNotFound, problem{status: http.StatusNotFound, slug: "bol-not-found", title: "Bill of lading not found"}},
+	// Not-found errors: the ids are minted by events from other contexts, not by
+	// a request, so the fact can arrive later (ADR 0012, J1).
+	{repository.ErrLoadNotFound, newProblem(http.StatusNotFound, "load-not-found", "Outbound load not found", replayRetryable)},
+	{repository.ErrPackageNotFound, newProblem(http.StatusNotFound, "package-not-found", "Shipping package not found", replayRetryable)},
+	{repository.ErrBolNotFound, newProblem(http.StatusNotFound, "bol-not-found", "Bill of lading not found", replayRetryable)},
 
 	// Concurrency.
-	{repository.ErrConcurrentModification, problem{status: http.StatusConflict, slug: "concurrent-modification", title: "The resource was modified by another request; re-fetch the latest version and retry"}},
+	{repository.ErrConcurrentModification, newProblem(http.StatusConflict, "concurrent-modification", "The resource was modified by another request; re-fetch the latest version and retry", replayRetryable)},
 }
 
 // problemFor returns the problem of the first catalogue entry err matches,
