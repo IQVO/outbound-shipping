@@ -37,7 +37,7 @@ Every error is `application/problem+json` with `type` `https://errors.outbound-s
 | Status and slug | Cause | Fix |
 |---|---|---|
 | `400 idempotency-key-required` | a POST without `Idempotency-Key`, or with one longer than 128 characters | Send the header: 1 to 128 characters, the fleet bound ([ADR 0010](/docs/adr/0010-spec-rulings-from-the-bdd-wave)). |
-| `409 idempotency-key-reused` | the key was used with another method, path or body | Use a new key for a new request. A replay of the same request returns the stored answer with `Idempotency-Replayed: true`. |
+| `409 idempotency-key-reused` | the key was used with another method, path or body | Use a new key for a new request. A replay of the same request returns the stored answer with `Idempotency-Replayed: true` — when the stored answer is final ([ADR 0012](/docs/adr/0012-every-problem-type-has-a-replay-class)); a RETRYABLE refusal was never stored, so the same key runs again. |
 | `400 unknown-query-parameter` | a query parameter the route does not declare | Remove it. `GET /loads` takes `site_id`, `state`, `operating_date`, `limit`, `cursor`. |
 | `422 not-staging-location` | the location is not a `Staging` location of the package's own site, or the layout copy has no such location yet (`zones` and `locations` come from `warehouse.facility.events`) | `SELECT l.location_code, l.role, z.site_code FROM locations l LEFT JOIN zones z USING (zone_id) WHERE l.location_code = ...`. An empty `role` means Storage and never stages. |
 | `409 wrong-load` | the package is on another load, has no load, or the door scanned is not the load's door (a load with no door assigned refuses every loading) | `GET /loads/{id}` for `door_code`; check the package's `load_id` | Scan through the load's door; fix the door assignment if it is empty. |
@@ -46,7 +46,7 @@ Every error is `application/problem+json` with `type` `https://errors.outbound-s
 | `409 load-state`, `load-not-closed`, `load-confirmed` | the command does not fit the load's state (a cancel of a `LOADING` or `CLOSED` load is `load-state`); a `SHIP_CONFIRMED` load never changes, whatever the command, a cancel included (`load-confirmed`) | `GET /loads/{id}` | none; confirmation is final. Void the bill of lading if it was wrong; the shipment is not undone. |
 | `409 load-has-packages` | cancelling a `PLANNED` load that already has packages (a `LOADING` load answers `load-state`) | | Short-ship the packages and close instead. |
 | `400 bad-request` on a close | a `short_ships` entry without a `package_id` or a `reason` | | Send both fields for every entry; nothing was changed. |
-| `409 concurrent-modification` | optimistic-lock failure (`WHERE version = ...` matched no row) | re-read and retry | Retry with a new `Idempotency-Key`; the same key replays the stored 409. |
+| `409 concurrent-modification` | optimistic-lock failure (`WHERE version = ...` matched no row) | re-read and retry | Retry — the same `Idempotency-Key` works: the refusal is RETRYABLE ([ADR 0012](/docs/adr/0012-every-problem-type-has-a-replay-class)), nothing was stored and the key was released, so the retry executes. |
 | `404 load-not-found`, `package-not-found`, `bol-not-found` | unknown id | | Packages exist only after a manifest was applied. |
 
 ## Ship-confirm does not happen

@@ -32,7 +32,7 @@ Nine further `*_rules.feature` files pin the rules the documentation states (use
 
 | File | Definitions | Rules |
 |---|---|---|
-| `api_convention_rules.feature` | 15 | `Idempotency-Key` (missing, 1, 128, 129 characters, replay, reuse), malformed bodies, problem shape, query-parameter errors and `limit` bounds, `/readyz`, CloudEvents type, source and key |
+| `api_convention_rules.feature` | 16 | `Idempotency-Key` (missing, 1, 128, 129 characters, replay, retryable release, reuse), malformed bodies, problem shape, query-parameter errors and `limit` bounds, `/readyz`, CloudEvents type, source and key |
 | `bill_of_lading_rules.feature` | 6 | content, void with reason, void twice, `bol-not-found` |
 | `consumer_policy_rules.feature` | 28 | `ExpectPackage` cutoff resolution (days of week, site timezone), schedule and layout replacement, `BookAppointment` (including the appointment-before-load gap as today's behaviour), `DockTrailer`, `DivertPackage` |
 | `load_and_package_rules.feature` | 30 | `StagePackage`, `LoadPackage`, `UnloadPackage`, `CloseLoad` (short-ships, outstanding packages, diverted once) |

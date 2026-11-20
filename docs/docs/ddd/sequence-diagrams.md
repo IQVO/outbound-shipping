@@ -87,7 +87,7 @@ sequenceDiagram
     I-->>Op: 200 package
 ```
 
-Source: `internal/application/usecases/scan_package.go`, `internal/adapters/inbound/http/idempotency.go`, `internal/adapters/inbound/http/handlers.go`. A refusal (`422 not-staging-location`, `409 wrong-load`) rolls the unit back and the 4xx answer is stored under the key; a 5xx is never stored.
+Source: `internal/application/usecases/scan_package.go`, `internal/adapters/inbound/http/idempotency.go`, `internal/adapters/inbound/http/handlers.go`. A refusal (`422 not-staging-location`, `409 wrong-load`) rolls the unit back; both are RETRYABLE ([ADR 0012](/docs/adr/0012-every-problem-type-has-a-replay-class)), so nothing is stored under the key and a retry executes again. A FINAL refusal (e.g. `400 bad-request`) is stored on its own after the rollback; a 5xx is never stored.
 
 ## 4. Close the load
 

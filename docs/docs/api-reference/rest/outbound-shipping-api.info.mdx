@@ -45,9 +45,14 @@ transaction; a relay drains them to Kafka
 (`warehouse.outbound-shipping.events`, ADR 0005).
 
 **Idempotency.** Every POST takes an `Idempotency-Key` (fleet REST
-guideline R3): the first request executes, a replay returns the original
-response with `Idempotency-Replayed: true`, and a key reused with a
-DIFFERENT body is a `409 idempotency-key-reused` (R4).
+guideline R3): the first request executes, and a replay returns the
+stored answer with `Idempotency-Replayed: true` when that answer is
+final for the request — a 2xx, or a refusal whose problem type is
+FINAL (ADR 0012). A RETRYABLE refusal (a lost optimistic lock, a fact
+an event has not delivered yet, an aggregate state not reached yet) is
+not stored: the key is released and a retry executes again. A 5xx is
+never stored. A key reused with a DIFFERENT body after a stored answer
+is a `409 idempotency-key-reused` (R4).
 
 **Errors** are RFC 9457 problem+json with a fleet `code`. The domain
 refusals map 1:1 to the model's invariant errors, e.g.
