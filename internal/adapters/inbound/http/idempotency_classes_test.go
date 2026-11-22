@@ -231,7 +231,7 @@ func TestARefusalWithNoClassIsReleased(t *testing.T) {
 // the loser answers the stored answer (the key is no longer free) instead of its own
 // refusal, and with another body it is the key-reuse conflict.
 func TestARetryableLoserOfARaceAnswersWhatTheWinnerStored(t *testing.T) {
-	store := memory.NewIdempotencyStore()
+	store := memory.NewIdempotencyStoreWithClock(replayClock{})
 	uow := memory.NewUnitOfWork()
 	const path, body = "/missed-load-sweeps", `{"n":1}`
 	sum := sha256.Sum256([]byte("POST\n" + path + "\n" + body))

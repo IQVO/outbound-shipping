@@ -150,3 +150,52 @@ another body under the released key is a new request; a `bad-request` is stored 
   concurrent-duplicate behaviour (both run) is pre-existing and unchanged. The inline `detail` strings the
   handlers used to pass inside their problem literals never reached the wire (`writeProblem` takes its detail from
   its argument, which was empty) and were dropped with the literals; the bodies are byte-identical.
+
+## Addendum 2026-11-22: retention — a 24h TTL on replays and a purge for the dead rows
+
+The Decision text above is unchanged. This addendum closes the retention open point of Consequences
+("`idempotency_keys` has an index on `created_at` but nothing deletes its rows and `Lookup` has no age check,
+so the stated 24-hour window is not enforced"). Until now NO window was enforced at all: a stored answer
+replayed forever and the table grew without bound. `processed_events` and `outbox_events` remain unbounded
+(out of scope here, unchanged).
+
+### Decision
+
+1. **One TTL constant.** `ports.IdempotencyTTL` (24h, the fleet default) is the single constant the read
+   guard, the store write and the purge share. Introducing it is a behaviour change: a stored answer now
+   stops answering 24 hours after it was stored; the key then EXECUTES again (the same key and body is a new
+   request, never `idempotency-key-reused`, exactly like a RETRYABLE-released key). The OpenAPI
+   `Idempotency-Key` description and the REST reference now say the window.
+2. **An age guard on the replay read.** `postgres.IdempotencyStore.Lookup` selects
+   `created_at > now() - IdempotencyTTL`; an expired row is a miss, so a row can never answer between expiry
+   and the sweep. `Save` keeps the first writer of a LIVE key (the `DO UPDATE ... WHERE expired` matches
+   nothing while the stored row is live — two concurrent 2xx duplicates still leave one answer, the winner's)
+   and replaces a row older than the TTL: a request that re-executes an expired key stores its fresh answer
+   in place. The memory double has the same semantics on an injectable clock (`NewIdempotencyStoreWithClock`;
+   the doubles share the middleware's clock, like the real pair).
+3. **A bounded background purge, never waiting.** `PurgeExpired(ctx, limit)` on `ports.IdempotencyStore`
+   (Postgres and memory) deletes `created_at <= now() - IdempotencyTTL` — the exact complement of the read
+   guard — oldest first, at most `limit` rows per statement
+   (`ORDER BY created_at LIMIT n FOR UPDATE SKIP LOCKED`, no advisory lock). A worker in `cmd/api`
+   (`retention.go`, a `worker` like the consumers and the relay, stopped and awaited at shutdown) purges at
+   boot and then hourly, batches of 500, repeating a pass until a short batch; a failed pass is logged at
+   ERROR and retried at the next tick. The interval and the batch are fixed housekeeping constants, not
+   configuration (the age is the TTL; the rest is not a knob).
+4. **It cannot race a request.** Under this store family a request stores its 2xx answer INSIDE its unit of
+   work (a FINAL 4xx by a separate write), taking the row lock until the commit: the purge's `SKIP LOCKED`
+   skips that row, never waits for it, and the outer `DELETE` re-checks the predicate once a row is locked,
+   so a row refreshed between pick and delete survives. A row the purge deletes before a request's Save
+   merely turns that Save into an INSERT. Expiry is enforced at read regardless: a late or failed purge
+   changes no answer, it only costs disk.
+
+### What the tests prove
+
+`cmd/api/idempotency_retention_integration_test.go` (real Postgres, real middleware — and, for replay
+expiry, the real router with the real StagePackage command): an expired key executes instead of answering and
+its fresh answer then replays; the purge deletes expired rows and keeps live ones; one call deletes at most
+one batch; a purge against a row a request holds deletes nothing and does not wait; a purge racing requests
+on expired keys never serves an expired answer and leaves one live row per key. Docker-free:
+`internal/adapters/outbound/memory/idempotency_retention_test.go` (the double's guard, replace-on-expired
+Save, oldest-first bounded purge) and `cmd/api/retention_test.go` (the drain-until-short-batch loop, failure
+and cancellation). The red first: the integration file was pushed alone (PR draft, CI integration job red on
+the missing `PurgeExpired`/`IdempotencyTTL`), then the fix.

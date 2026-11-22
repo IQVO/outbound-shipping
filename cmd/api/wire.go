@@ -23,6 +23,7 @@ type application struct {
 	server    *http.Server
 	readiness *inboundhttp.Readiness
 	consumers []*worker
+	purge     *worker
 	relay     *worker
 	relaySink *outboundkafka.RelaySink
 	pool      closer
@@ -109,6 +110,7 @@ func wire(ctx context.Context, cfg config, logger *slog.Logger) (*application, e
 	})
 
 	consumers := startConsumers(cfg, logger, policies)
+	purge := startIdempotencyPurge(idemStore, logger)
 	relaySink, relay := startRelay(cfg, outboxRepo, logger)
 
 	return &application{
@@ -117,6 +119,7 @@ func wire(ctx context.Context, cfg config, logger *slog.Logger) (*application, e
 		},
 		readiness: readiness,
 		consumers: consumers,
+		purge:     purge,
 		relay:     relay,
 		relaySink: relaySink,
 		pool:      pool,
