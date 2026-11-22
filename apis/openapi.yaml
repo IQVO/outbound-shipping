@@ -33,7 +33,10 @@ info:
     an event has not delivered yet, an aggregate state not reached yet) is
     not stored: the key is released and a retry executes again. A 5xx is
     never stored. A key reused with a DIFFERENT body after a stored answer
-    is a `409 idempotency-key-reused` (R4).
+    is a `409 idempotency-key-reused` (R4). A stored answer is replayed for
+    24 hours after it was stored (ADR 0012, addendum 2026-11-22); after
+    that the key is free and the request executes again, and a background
+    purge deletes the expired rows.
 
     **Errors** are RFC 9457 problem+json with a fleet `code`. The domain
     refusals map 1:1 to the model's invariant errors, e.g.
@@ -567,8 +570,11 @@ components:
         refusal (ADR 0012). A RETRYABLE refusal is not stored: the key is
         released and a retry executes again. A key reused with a different
         body after a stored answer is `409 idempotency-key-reused`.
-        A key of 1 to 128 characters is accepted (the fleet bound); a missing
-        or longer one is `400 idempotency-key-required`.
+        A stored answer is replayed for 24 hours after it was stored
+        (ADR 0012, addendum 2026-11-22); after that the key is free and the
+        request executes again. A key of 1 to 128 characters is accepted
+        (the fleet bound); a missing or longer one is
+        `400 idempotency-key-required`.
       schema:
         type: string
         minLength: 1

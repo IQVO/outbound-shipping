@@ -151,8 +151,8 @@ Some columns are omitted for readability (`created_at`/`updated_at`, `dataschema
 | `load_board` | LoadBoardView projection | PK `load_id`; index `(site_id, operating_date, cpt_id)` for the report | analytics consumer |
 | `outbox_events` | transactional outbox | PK `id`; `UNIQUE (event_id, topic)`; partial index of unpublished rows | use cases (insert), relay (drain) |
 | `processed_events` | inbox | PK `(consumer, event_id)` | every consumer |
-| `idempotency_keys` | stored answers of REST POSTs: 2xx and FINAL refusals ([ADR 0012](/docs/adr/0012-every-problem-type-has-a-replay-class)); the CHECK still admits any 4xx | PK `key`; `status` between 200 and 499; index on `created_at` | the Idempotency-Key middleware |
+| `idempotency_keys` | stored answers of REST POSTs: 2xx and FINAL refusals ([ADR 0012](/docs/adr/0012-every-problem-type-has-a-replay-class)); the CHECK still admits any 4xx; an answer older than 24h never replays ([ADR 0012 addendum](/docs/adr/0012-every-problem-type-has-a-replay-class)) | PK `key`; `status` between 200 and 499; index on `created_at` | the Idempotency-Key middleware (write), the idempotency-purge worker (delete expired) |
 
 Text keys that are compared or ordered in Go use the `"C"` collation so ordering and keyset comparisons follow byte order. The migration has a `.down.sql`; there is no other migration.
 
-There is no analytics database and no retention job: `outbox_events`, `processed_events` and `idempotency_keys` grow without a purge (see the [runbook](/docs/operations/runbook)).
+There is no analytics database. `idempotency_keys` is bounded: answers older than 24 hours never replay and the idempotency-purge worker deletes them hourly ([ADR 0012 addendum](/docs/adr/0012-every-problem-type-has-a-replay-class)). `outbox_events` and `processed_events` still grow without a purge (see the [runbook](/docs/operations/runbook)).

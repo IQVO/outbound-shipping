@@ -155,7 +155,16 @@ Re-arm a parked row after fixing the cause (broker down, topic misconfigured, me
 UPDATE outbox_events SET attempts = 0 WHERE id = <id> AND published_at IS NULL;
 ```
 
-`published_at` rows are never deleted by the service: there is no housekeeping job, so the table grows. Plan retention before this runs in production.
+`published_at` rows are never deleted by the service: there is no housekeeping job for the outbox, so the table grows. Plan retention before this runs in production.
+
+## Idempotency keys
+
+`idempotency_keys` rows are kept for 24 hours (`ports.IdempotencyTTL`, [ADR 0012 addendum](/docs/adr/0012-every-problem-type-has-a-replay-class)):
+
+- **Expiry is enforced at read.** A stored answer older than 24 hours never replays: the key is free and the request executes again. Use a fresh key per logical request regardless (the fleet rule).
+- **A background purge deletes the expired rows.** The `idempotency-purge` worker runs one pass at boot and then every hour, deleting at most 500 rows per statement (`ORDER BY created_at ... FOR UPDATE SKIP LOCKED`); a failed pass is retried at the next tick. A late or failed purge changes no answer — it only costs disk. Watch for `idempotency purge failed` (ERROR) in the logs; a growing `idempotency_keys` count (`SELECT count(*) FROM idempotency_keys WHERE created_at > now() - interval '24 hours'` rising) means writes outpace the hour, which is not expected at fleet volumes.
+
+`processed_events` (the consumers' inbox) is still unbounded: no purge, plan retention before production.
 
 ## Dead letters
 
