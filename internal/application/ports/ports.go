@@ -191,4 +191,9 @@ type IdempotencyStore interface {
 	// replaces it: the expired answer no longer exists for any reader, so the
 	// key's next answer is the fresh one.
 	Save(ctx context.Context, rec repository.IdempotencyRecord) error
+	// PurgeExpired deletes up to limit rows older than IdempotencyTTL and
+	// returns how many it deleted; a result below limit means nothing expired
+	// is left. The purge only stops the table from growing: expiry is already
+	// enforced at read, so a late or failed purge changes no answer.
+	PurgeExpired(ctx context.Context, limit int) (int, error)
 }

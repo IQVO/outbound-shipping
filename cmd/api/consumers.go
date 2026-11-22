@@ -80,16 +80,18 @@ func startRelay(cfg config, store outboxrelay.Store, logger *slog.Logger) (*outb
 
 // runConsumers blocks until ctx is done (the shutdown signal), then stops and
 // awaits every worker in the fleet order: the consumers first -- they may
-// still enqueue outbox rows while draining -- the relay LAST, then the
-// readers' kafka resources. The relay sink's writer is released by close(),
-// after the HTTP drain.
+// still enqueue outbox rows while draining -- then the idempotency purge, the
+// relay LAST, then the readers' kafka resources. The relay sink's writer is
+// released by close(), after the HTTP drain.
 func (a *application) runConsumers(ctx context.Context) error {
 	<-ctx.Done()
 	for _, w := range a.consumers {
 		w.stop()
 	}
+	a.purge.stop()
 	a.relay.stop()
-	for _, w := range append(a.consumers, a.relay) {
+	workers := append(append([]*worker{}, a.consumers...), a.purge, a.relay)
+	for _, w := range workers {
 		<-w.done
 		if w.closer != nil {
 			if err := w.closer.Close(); err != nil {

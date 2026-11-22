@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -55,6 +56,40 @@ func TestLookupIgnoresExpiredAnswers(t *testing.T) {
 	s.mu.Unlock()
 	if !expiredRow {
 		t.Fatal("the expired row vanished without a purge: Lookup must not delete")
+	}
+}
+
+// The purge deletes only expired rows, at most limit per call, oldest first.
+func TestPurgeExpiredDeletesOldestExpiredUpToTheLimit(t *testing.T) {
+	s, clock := retentionStore(t)
+	ctx := context.Background()
+	for i, age := range []time.Duration{49 * time.Hour, 25 * time.Hour, 48 * time.Hour} {
+		if err := s.Save(ctx, savedAt(fmt.Sprintf("old-%d", i), age, clock.at)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Save(ctx, savedAt("live", time.Hour, clock.at)); err != nil {
+		t.Fatal(err)
+	}
+
+	n, err := s.PurgeExpired(ctx, 2)
+	if err != nil || n != 2 {
+		t.Fatalf("first purge = %d, %v, want 2", n, err)
+	}
+	if _, found, _ := s.Lookup(ctx, "old-0"); found {
+		t.Fatal("the oldest row survived the batch: the purge is oldest-first")
+	}
+	if _, found, _ := s.Lookup(ctx, "live"); !found {
+		t.Fatal("a live row was deleted: the purge touches only expired rows")
+	}
+	if n, err := s.PurgeExpired(ctx, 2); err != nil || n != 1 {
+		t.Fatalf("second purge = %d, %v, want the last expired row", n, err)
+	}
+	if n, err := s.PurgeExpired(ctx, 2); err != nil || n != 0 {
+		t.Fatalf("third purge = %d, %v, want 0: nothing expired is left", n, err)
+	}
+	if n, err := s.PurgeExpired(ctx, 0); err != nil || n != 0 {
+		t.Fatalf("a non-positive limit = %d, %v, want a no-op", n, err)
 	}
 }
 

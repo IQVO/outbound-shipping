@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"sort"
 	"sync"
 	"time"
 
@@ -65,4 +66,30 @@ func (s *IdempotencyStore) Save(_ context.Context, rec repository.IdempotencyRec
 		s.rows[rec.Key] = rec
 	}
 	return nil
+}
+
+// PurgeExpired implements ports.IdempotencyStore: up to limit expired rows
+// deleted, oldest first (like the Postgres purge's ORDER BY created_at), and
+// how many went. It deletes only rows the read guard already ignores.
+func (s *IdempotencyStore) PurgeExpired(_ context.Context, limit int) (int, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := s.now()
+	expired := make([]repository.IdempotencyRecord, 0, len(s.rows))
+	for _, rec := range s.rows {
+		if !live(rec, now) {
+			expired = append(expired, rec)
+		}
+	}
+	sort.Slice(expired, func(i, j int) bool { return expired[i].CreatedAt.Before(expired[j].CreatedAt) })
+	if len(expired) > limit {
+		expired = expired[:limit]
+	}
+	for _, rec := range expired {
+		delete(s.rows, rec.Key)
+	}
+	return len(expired), nil
 }
