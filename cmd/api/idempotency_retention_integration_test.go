@@ -260,7 +260,14 @@ func TestRetentionExpiredKeyReExecutesThroughTheRealRouter(t *testing.T) {
 	if err := pkgs.Save(ctx, p, 0); err != nil {
 		t.Fatalf("save pkg-ret-1: %v", err)
 	}
-	r := newRetentionRig(t)
+	// Age the stored answer inside THIS test's database (pgtest.NewPool hands
+	// every call its own): one hour past the TTL.
+	agePastTTL := func(key string) {
+		t.Helper()
+		if _, err := pool.Exec(ctx, `UPDATE idempotency_keys SET created_at = now() - $2::interval WHERE key = $1`, key, (ports.IdempotencyTTL + time.Minute).String()); err != nil {
+			t.Fatalf("age %s: %v", key, err)
+		}
+	}
 	srv := &inboundhttp.Server{
 		Stage:       &usecases.StagePackage{UoW: uow, Pkgs: pkgs, Layout: copies, Sink: sink, Clock: clock},
 		Idempotency: inboundhttp.NewIdempotency(postgres.NewIdempotencyStore(pool), uow, clock).Middleware,
@@ -280,7 +287,7 @@ func TestRetentionExpiredKeyReExecutesThroughTheRealRouter(t *testing.T) {
 	if first.status != http.StatusOK || first.replayed {
 		t.Fatalf("the first stage = %d replayed=%v %s, want a fresh 200", first.status, first.replayed, first.body)
 	}
-	r.exec(`UPDATE idempotency_keys SET created_at = now() - $2::interval WHERE key = $1`, key, (ports.IdempotencyTTL + time.Minute).String())
+	agePastTTL(key)
 	again := post(key)
 	if again.status != http.StatusOK || again.replayed {
 		t.Fatalf("a stage replay past the TTL = %d replayed=%v, want a fresh 200 (the key executed again)", again.status, again.replayed)
