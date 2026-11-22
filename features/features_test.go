@@ -182,7 +182,10 @@ func (s *service) wireRules(uow *memory.UnitOfWork, sink *events.Sink, clock clo
 		inboundhttp.Dependency{Name: "postgres", Check: check("postgres")},
 		inboundhttp.Dependency{Name: "kafka", Check: check("kafka")},
 	)
-	idem := inboundhttp.NewIdempotency(memory.NewIdempotencyStore(), uow, clock)
+	// The idempotency double shares the service's fixed clock so a stored
+	// answer is inside the TTL, exactly like the real pair (retention,
+	// ADR 0012 addendum).
+	idem := inboundhttp.NewIdempotency(memory.NewIdempotencyStoreWithClock(clock), uow, clock)
 	s.router = inboundhttp.NewRouter(&inboundhttp.Server{
 		Stage: s.stage, Load: s.loadPkg, Unload: s.unload, Close: s.closeCmd,
 		Reopen: s.reopen, Cancel: s.cancel, VoidBol: s.voidBol, Sweep: s.sweep,

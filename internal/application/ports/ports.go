@@ -171,13 +171,24 @@ type ProcessedEvents interface {
 	Claim(ctx context.Context, consumer, eventID string) (claimed bool, err error)
 }
 
+// IdempotencyTTL is how long a stored answer still answers a replay: 24h, the
+// fleet default. It is the ONE constant the replay read guard, the store
+// write and the retention purge share (ADR 0012, addendum 2026-11-22): a row
+// older than the TTL never answers -- the key executes again -- and is
+// eventually deleted by the purge.
+const IdempotencyTTL = 24 * time.Hour
+
 // IdempotencyStore keeps the answers of POSTs made with an Idempotency-Key.
 // The HTTP adapter stores a 2xx answer and a 4xx answer whose problem type is
-// FINAL (ADR 0012); a RETRYABLE refusal and a 5xx are never stored.
+// FINAL (ADR 0012); a RETRYABLE refusal and a 5xx are never stored. An answer
+// older than IdempotencyTTL is gone for every reader: the key executes again.
 type IdempotencyStore interface {
-	// Lookup returns the stored answer for the key.
+	// Lookup returns the stored answer for the key while it is live (no older
+	// than IdempotencyTTL); an expired row is a miss.
 	Lookup(ctx context.Context, key string) (repository.IdempotencyRecord, bool, error)
-	// Save stores the answer; the first writer of a key wins and a later Save
-	// of the same key changes nothing.
+	// Save stores the answer; the first writer of a live key wins and a later
+	// Save changes nothing. A Save over a row older than IdempotencyTTL
+	// replaces it: the expired answer no longer exists for any reader, so the
+	// key's next answer is the fresh one.
 	Save(ctx context.Context, rec repository.IdempotencyRecord) error
 }

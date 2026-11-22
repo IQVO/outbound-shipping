@@ -60,7 +60,9 @@ func (replayClock) Now() time.Time { return time.Date(2026, 11, 20, 9, 0, 0, 0, 
 
 func newReplayOps(t *testing.T) replayOps {
 	t.Helper()
-	store := memory.NewIdempotencyStore()
+	// The store shares the middleware's fixed clock: an answer stamped by it
+	// stays inside the TTL (ports.IdempotencyTTL), like the real pair.
+	store := memory.NewIdempotencyStoreWithClock(replayClock{})
 	probe := &writeProbe{rows: map[string]int{}}
 	uow := memory.NewUnitOfWork(probe)
 	return replayOps{
